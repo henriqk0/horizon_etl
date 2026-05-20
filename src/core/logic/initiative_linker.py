@@ -165,7 +165,7 @@ class InitiativeLinker:
                         campus_id=campus_id,
                     )
                     logger.info(f"Created new Research Group: {rg_name} (Campus ID: {campus_id})")
-                    
+
                     # RF-15: Auto-populate members for newly created groups
                     self._populate_group_members(target_group, initiative, project_data)
                 except Exception as e:
@@ -183,7 +183,7 @@ class InitiativeLinker:
         try:
             tg_id = target_group.id if hasattr(target_group, "id") else target_group.get("id")
             team_proxy = self.team_controller.get_by_id(tg_id)
-            
+
             if not team_proxy:
                 logger.warning(f"Could not find base Team for Research Group {tg_id}")
                 return
@@ -222,7 +222,7 @@ class InitiativeLinker:
             if project_data.get("coordinator_name"):
                 res_names.append(project_data.get("coordinator_name"))
                 res_emails.append(project_data.get("coordinator_email"))
-            
+
             res_names.extend(project_data.get("researcher_names", []))
             res_emails.extend(project_data.get("researcher_emails", [None] * len(project_data.get("researcher_names", []))))
 
@@ -300,6 +300,7 @@ class InitiativeLinker:
         try:
             all_groups = self.rg_controller.get_all()
             target_group = None
+
             def normalize(s):
                 return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("utf-8").upper().strip()
             target_norm = normalize(rg_name)

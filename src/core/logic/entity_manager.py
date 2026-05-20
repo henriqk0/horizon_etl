@@ -1,4 +1,4 @@
-import unicodedata
+
 from typing import Any, Dict, Optional
 
 from eo_lib import (
@@ -18,7 +18,7 @@ from research_domain.controllers import (
     RoleController,
     ArticleController
 )
-from research_domain.domain.entities.academic_education import EducationType
+
 from src.core.logic.initiative_identity import normalize_text
 
 
@@ -54,7 +54,7 @@ class EntityManager:
         """Ensure an organization exists and return its ID."""
         if not name:
             return None
-        
+
         # If using the default name and short_name is not provided, default it to IFES
         if name == "Instituto Federal do Espírito Santo" and short_name is None:
             short_name = "IFES"
@@ -269,7 +269,7 @@ class EntityManager:
             # Create
             logger.info(f"Creating Education Type: {name}")
             new_type = self.edu_type_controller.create_education_type(name=name)
-            
+
             # The controller returns the object or a dict depending on implementation
             # In v0.12.7 it returns the object directly
             return new_type.id if hasattr(new_type, "id") else new_type.get("id")

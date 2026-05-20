@@ -1,4 +1,4 @@
-import os
+
 from typing import List, Dict
 
 
@@ -41,7 +41,7 @@ global-producao_tecnica-itens = software,patente,desenho-industrial,produto-tecn
 global-producao_artistica-itens = producao
 global-identificacao_dos_grupos_de_pesquisa = SIM
 global-arquivo_de_entrada = {list_path}
-global-arquivo_de_entrada_de_grupos = 
+global-arquivo_de_entrada_de_grupos =
 global-diretorio_de_saida_json = {output_dir}
 """
         with open(config_path, "w") as f:

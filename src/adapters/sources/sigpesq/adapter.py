@@ -6,11 +6,11 @@ from typing import Any, Dict, List
 
 from loguru import logger
 
-_SIGPESQ_429_WAIT_SECONDS = int(os.getenv("SIGPESQ_429_WAIT_SECONDS", "60"))
-_SIGPESQ_MAX_RETRIES = int(os.getenv("SIGPESQ_MAX_RETRIES", "3"))
-
 from src.core.logic.loaders import SigPesqFileLoader
 from src.core.ports.source import ISource
+
+_SIGPESQ_429_WAIT_SECONDS = int(os.getenv("SIGPESQ_429_WAIT_SECONDS", "60"))
+_SIGPESQ_MAX_RETRIES = int(os.getenv("SIGPESQ_MAX_RETRIES", "3"))
 
 
 class SigPesqAdapter(ISource):

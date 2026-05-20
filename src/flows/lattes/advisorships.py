@@ -96,7 +96,9 @@ def ingest_lattes_advisorships_flow():
         logger.warning(f"No JSON files found in {base_dir}")
         return
 
-    with tracking_recorder.run_context(source_system="lattes", flow_name="ingest_lattes_advisorships"):
+    with tracking_recorder.run_context(
+        source_system="lattes", flow_name="ingest_lattes_advisorships"
+    ):
         for json_file in json_files:
             ingest_advisorships_file_task(json_file)
 

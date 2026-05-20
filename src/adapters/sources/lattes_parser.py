@@ -1,4 +1,3 @@
-import json
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -399,16 +398,7 @@ class LattesParser:
         section = data.get("dados_complementares", {}).get(key, [])
         parsed = []
 
-        # Mapping of Lattes types to Canonical types
-        # This mapping might need refinement based on exact Lattes strings
-        type_map = {
-            "dissertacao_de_mestrado": "Master's Thesis",
-            "tese_de_doutorado": "PhD Thesis",
-            "monografia_de_conclusao_de_curso_aperfeicoamento_e_especializacao": "Specialization",
-            "trabalho_de_conclusao_de_curso_graduacao": "Undergraduate Thesis",
-            "iniciacao_cientifica": "Scientific Initiation",
-            "supervisao_de_pos_doutorado": "Post-Doc Supervision",
-        }
+
 
         for item in section:
             # Type extraction logic can be complex in Lattes.

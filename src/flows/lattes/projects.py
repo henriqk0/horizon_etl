@@ -4,16 +4,16 @@ import glob
 import json
 import os
 import re
-from typing import Any, Dict, List
+from typing import Dict, List
 
 faulthandler.enable()
 
-from eo_lib import InitiativeController, PersonController, TeamController
+from eo_lib import InitiativeController, PersonController
+from eo_lib.domain.base import Base
 from loguru import logger
 from prefect import flow, task
 from prefect.cache_policies import NO_CACHE
 from research_domain.controllers import (
-    AcademicEducationController,
     ArticleController,
     ResearcherController,
 )
@@ -588,13 +588,13 @@ def ingest_lattes_projects_flow():
     if not json_files:
         return
 
-    with tracking_recorder.run_context(source_system="lattes", flow_name="ingest_lattes_projects"):
+    with tracking_recorder.run_context(
+        source_system="lattes", flow_name="ingest_lattes_projects"
+    ):
         init_ctrl = InitiativeController()
         person_ctrl = PersonController()
         entity_manager = EntityManager(init_ctrl, person_ctrl)
         parser = LattesParser()
-
-        from eo_lib.domain.base import Base
 
         engine = _resolve_sqlalchemy_engine(init_ctrl)
 

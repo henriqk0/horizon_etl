@@ -2,7 +2,7 @@ from collections import Counter
 from datetime import date
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from eo_lib import InitiativeController, TeamController
 from loguru import logger
@@ -164,7 +164,7 @@ class InitiativeAnalyticsMartGenerator:
                 # Access the session from the repo inside the service inside the controller
                 # This is a bit internal-dependent but necessary without eager loading support in generic controller
                 session = self.initiative_ctrl._service._repository._session
-                
+
                 i_query = text("""
                     SELECT ika.initiative_id, ka.id, ka.name
                     FROM initiative_knowledge_areas ika
@@ -173,11 +173,11 @@ class InitiativeAnalyticsMartGenerator:
                 # Execute inside a transaction block or connection if needed, but session.execute should work
                 i_result = session.execute(i_query).fetchall()
                 for row in i_result:
-                     iid = row[0]
-                     if iid not in initiative_kas_map: 
-                         initiative_kas_map[iid] = []
-                     initiative_kas_map[iid].append({"id": row[1], "name": row[2]})
-                
+                    iid = row[0]
+                    if iid not in initiative_kas_map:
+                        initiative_kas_map[iid] = []
+                    initiative_kas_map[iid].append({"id": row[1], "name": row[2]})
+
                 logger.info(f"Pre-fetched KAs for {len(initiative_kas_map)} initiatives.")
             except Exception as e:
                 logger.warning(f"Failed to fetch Knowledge Area mappings for analytics: {e}")
@@ -262,7 +262,7 @@ class InitiativeAnalyticsMartGenerator:
                 # Knowledge Areas Stats - Manual Fetching using Logic similar to Canonical Exporter
                 # The InitiativeController object doesn't include KAs by default.
                 # We need to map Initiative -> KAs using the join table.
-                
+
                 # Fetch KAs for this initiative from the pre-fetched map
                 if init.id in initiative_kas_map:
                     for ka in initiative_kas_map[init.id]:
@@ -354,7 +354,7 @@ class InitiativeAnalyticsMartGenerator:
                                         or "coordenador" in role_name
                                     ):
                                         year_researchers.add(m.person_id)
-                        except:
+                        except Exception:
                             pass
 
                 # Apply partition priority per year (Student > Researcher)

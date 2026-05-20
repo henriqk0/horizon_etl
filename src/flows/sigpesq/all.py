@@ -45,7 +45,9 @@ def ingest_sigpesq_flow() -> None:
     logger = get_run_logger()
     logger.info("Initializing SigPesq Full Ingestion Flow")
 
-    with tracking_recorder.run_context(source_system="sigpesq", flow_name="ingest_sigpesq_full"):
+    with tracking_recorder.run_context(
+        source_system="sigpesq", flow_name="ingest_sigpesq_full"
+    ):
         adapter = SigPesqAdapter()
         logger.info("Extracting all SigPesq reports with a single login...")
         adapter.extract(download_strategies=_download_strategies())

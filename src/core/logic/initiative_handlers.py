@@ -5,13 +5,7 @@ from typing import Any, Dict, Optional
 from eo_lib import Initiative, InitiativeController, Person
 from eo_lib.domain import Role
 from loguru import logger
-from research_domain import (
-    CampusController,
-    KnowledgeAreaController,
-    ResearcherController,
-    ResearchGroupController,
-    UniversityController,
-)
+
 
 # Workaround: Import directly from controllers module since not exported in __init__
 from research_domain.controllers.controllers import (

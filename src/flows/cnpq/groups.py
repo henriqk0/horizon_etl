@@ -195,7 +195,9 @@ def sync_cnpq_groups_flow(campus_name: Optional[str] = None):
     logger = get_run_logger()
     logger.info(f"Starting CNPq Synchronization Flow (Filter: {campus_name or 'None'})")
 
-    with tracking_recorder.run_context(source_system="cnpq", flow_name="sync_cnpq_groups"):
+    with tracking_recorder.run_context(
+        source_system="cnpq", flow_name="sync_cnpq_groups"
+    ):
         groups = get_groups_to_sync(campus_name=campus_name)
 
         results = []
