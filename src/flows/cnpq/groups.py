@@ -195,19 +195,20 @@ def sync_cnpq_groups_flow(campus_name: Optional[str] = None):
     logger = get_run_logger()
     logger.info(f"Starting CNPq Synchronization Flow (Filter: {campus_name or 'None'})")
 
-    groups = get_groups_to_sync(campus_name=campus_name)
+    with tracking_recorder.run_context(source_system="cnpq", flow_name="sync_cnpq_groups"):
+        groups = get_groups_to_sync(campus_name=campus_name)
 
-    results = []
-    for g_info in groups:
-        res = sync_single_group(g_info)
-        results.append(res)
+        results = []
+        for g_info in groups:
+            res = sync_single_group(g_info)
+            results.append(res)
 
-    success_count = sum(1 for r in results if r.get("success"))
-    summary = build_cnpq_sync_summary(results)
-    logger.info(
-        f"Flow finished. Successfully synchronized {success_count}/{len(groups)} groups."
-    )
-    return summary
+        success_count = sum(1 for r in results if r.get("success"))
+        summary = build_cnpq_sync_summary(results)
+        logger.info(
+            f"Flow finished. Successfully synchronized {success_count}/{len(groups)} groups."
+        )
+        return summary
 
 
 if __name__ == "__main__":

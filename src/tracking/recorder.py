@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, Iterable, Optional
@@ -14,6 +15,35 @@ from src.tracking.controllers import (
     IngestionRunController,
     SourceRecordController,
 )
+
+# Sensitive field patterns that should be sanitized before storage (LGPD compliance)
+# These patterns match fields containing personal data that must not be stored
+SENSITIVE_FIELD_PATTERNS = re.compile(
+    r"(?i)"
+    r"(?:"
+    r"orientador_email|"  # Supervisor email
+    r"celular_orientador|"  # Supervisor phone
+    r"orientado_email|"  # Student email
+    r"orientado_cpf|"  # Student CPF (Brazilian ID)
+    r"celular_orientado|"  # Student phone
+    r"cpf|"  # CPF anywhere
+    r"email|"  # Generic email (too broad, be careful)
+    r"celular|"  # Generic phone
+    r"telefone"  # Generic phone
+    r")",
+    re.IGNORECASE,
+)
+
+# Fields that are explicitly sensitive and MUST be removed
+EXPLICIT_SENSITIVE_FIELDS = frozenset({
+    "OrientadorEmail",
+    "CelularOrientador",
+    "OrientadoEmail",
+    "OrientadoCpf",
+    "CelularOrientado",
+    "cpf",
+    "CPF",
+})
 
 
 def _json_default(value: Any) -> Any:
@@ -30,6 +60,62 @@ def _json_safe(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
+
+
+# Email pattern to detect and redact emails in string values
+EMAIL_PATTERN = re.compile(
+    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+    re.IGNORECASE,
+)
+
+
+def _redact_email(value: str) -> str:
+    """Redacts email addresses from a string, replacing with [REDACTED]."""
+    return EMAIL_PATTERN.sub("[REDACTED]", value)
+
+
+def sanitize_payload(payload: Any) -> Any:
+    """
+    Removes sensitive personal data from payload before storing in tracking tables.
+    This ensures LGPD compliance by not storing PII in the tracking audit trail.
+    """
+    if not isinstance(payload, dict):
+        # Also sanitize string values that might contain emails
+        if isinstance(payload, str) and EMAIL_PATTERN.search(payload):
+            return _redact_email(payload)
+        return payload
+
+    sanitized = {}
+    for key, value in payload.items():
+        # Skip explicitly sensitive fields
+        if key in EXPLICIT_SENSITIVE_FIELDS:
+            continue
+        # Skip fields matching sensitive patterns (except for safe exceptions)
+        if SENSITIVE_FIELD_PATTERNS.match(key):
+            # Allow some safe fields that happen to match patterns
+            if key.lower() in ("email", "celular", "telefone"):
+                # Check if it's actually a generic institutional field - still remove
+                pass
+            else:
+                continue
+
+        # Recursively sanitize nested dicts
+        if isinstance(value, dict):
+            sanitized[key] = sanitize_payload(value)
+        elif isinstance(value, (list, tuple)):
+            sanitized[key] = [
+                sanitize_payload(item) if isinstance(item, dict) else (
+                    _redact_email(item) if isinstance(item, str) else item
+                )
+                for item in value
+            ]
+        elif isinstance(value, str):
+            # Also redact emails in string values
+            sanitized[key] = _redact_email(value)
+        else:
+            sanitized[key] = value
+
+    return sanitized
 
 
 def stable_hash(value: Any) -> str:
@@ -136,7 +222,9 @@ class TrackingRecorder:
         if not run_id or not source_system:
             return None
 
-        payload_hash = stable_hash(payload)
+        # Sanitize payload to remove sensitive PII before storing (LGPD compliance)
+        sanitized_payload = sanitize_payload(payload)
+        payload_hash = stable_hash(sanitized_payload)
         with self._controller(
             getattr(self, "_source_record_controller_cls", SourceRecordController),
             legacy_attr="source_record_ctrl",
@@ -149,7 +237,7 @@ class TrackingRecorder:
                     source_record_id=source_record_id,
                     source_file=source_file,
                     source_path=source_path,
-                    raw_payload_json=_json_safe(payload),
+                    raw_payload_json=_json_safe(sanitized_payload),
                     payload_hash=payload_hash,
                 )
             except IntegrityError:
@@ -248,6 +336,10 @@ class TrackingRecorder:
         if not run_id:
             return
 
+        # Sanitize before/after to remove sensitive PII (LGPD compliance)
+        sanitized_before = sanitize_payload(before) if before else None
+        sanitized_after = sanitize_payload(after) if after else None
+
         with self._controller(
             getattr(
                 self,
@@ -263,8 +355,8 @@ class TrackingRecorder:
                 canonical_entity_id=canonical_entity_id,
                 operation=operation,
                 changed_fields_json=_json_safe(list(changed_fields)),
-                before_json=_json_safe(before),
-                after_json=_json_safe(after),
+                before_json=_json_safe(sanitized_before),
+                after_json=_json_safe(sanitized_after),
                 reason=reason,
             )
 

@@ -14,6 +14,7 @@ from src.core.logic.strategies.lattes_advisorships import (
     LattesAdvisorshipMappingStrategy,
 )
 from src.notifications.telegram import telegram_flow_state_handlers
+from src.tracking.recorder import tracking_recorder
 
 
 @task(name="Ingest Lattes Advisorships for File", cache_policy=NO_CACHE)
@@ -95,8 +96,9 @@ def ingest_lattes_advisorships_flow():
         logger.warning(f"No JSON files found in {base_dir}")
         return
 
-    for json_file in json_files:
-        ingest_advisorships_file_task(json_file)
+    with tracking_recorder.run_context(source_system="lattes", flow_name="ingest_lattes_advisorships"):
+        for json_file in json_files:
+            ingest_advisorships_file_task(json_file)
 
 
 if __name__ == "__main__":

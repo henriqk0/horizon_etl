@@ -588,29 +588,30 @@ def ingest_lattes_projects_flow():
     if not json_files:
         return
 
-    init_ctrl = InitiativeController()
-    person_ctrl = PersonController()
-    entity_manager = EntityManager(init_ctrl, person_ctrl)
-    parser = LattesParser()
+    with tracking_recorder.run_context(source_system="lattes", flow_name="ingest_lattes_projects"):
+        init_ctrl = InitiativeController()
+        person_ctrl = PersonController()
+        entity_manager = EntityManager(init_ctrl, person_ctrl)
+        parser = LattesParser()
 
-    from eo_lib.domain.base import Base
+        from eo_lib.domain.base import Base
 
-    engine = _resolve_sqlalchemy_engine(init_ctrl)
+        engine = _resolve_sqlalchemy_engine(init_ctrl)
 
-    try:
-        AcademicEducation.__table__.drop(engine, checkfirst=True)
-        academic_education_knowledge_areas.drop(engine, checkfirst=True)
-        EducationType.__table__.drop(engine, checkfirst=True)
-        Article.__table__.drop(engine, checkfirst=True)
-        article_authors.drop(engine, checkfirst=True)
-    except Exception:
-        pass
+        try:
+            AcademicEducation.__table__.drop(engine, checkfirst=True)
+            academic_education_knowledge_areas.drop(engine, checkfirst=True)
+            EducationType.__table__.drop(engine, checkfirst=True)
+            Article.__table__.drop(engine, checkfirst=True)
+            article_authors.drop(engine, checkfirst=True)
+        except Exception:
+            pass
 
-    Base.metadata.create_all(engine)
+        Base.metadata.create_all(engine)
 
-    for json_file in json_files:
-        ingest_researcher_data(json_file, entity_manager, parser)
-        gc.collect()
+        for json_file in json_files:
+            ingest_researcher_data(json_file, entity_manager, parser)
+            gc.collect()
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ from src.tracking.entities import (
     IngestionRun,
     SourceRecord,
 )
+from src.tracking.recorder import sanitize_payload
 from sqlalchemy import text
 
 try:
@@ -862,7 +863,7 @@ class CanonicalDataExporter:
                     "source_record_pk": record.get("source_record_pk"),
                     "selection_reason": record.get("selection_reason"),
                     "asserted_at": record.get("asserted_at"),
-                    "value": record.get("value_json"),
+                    "value": sanitize_payload(record.get("value_json")),
                     "value_hash": record.get("value_hash"),
                 }
 
@@ -888,9 +889,9 @@ class CanonicalDataExporter:
                     "source_file": record.get("source_file"),
                     "source_path": record.get("source_path"),
                     "changed_at": record.get("changed_at"),
-                    "changed_fields": record.get("changed_fields_json"),
-                    "before": record.get("before_json"),
-                    "after": record.get("after_json"),
+                    "changed_fields": sanitize_payload(record.get("changed_fields_json")),
+                    "before": sanitize_payload(record.get("before_json")),
+                    "after": sanitize_payload(record.get("after_json")),
                     "reason": record.get("reason"),
                 }
                 items[entity_id]["changes"].append(change)
@@ -999,9 +1000,23 @@ class CanonicalDataExporter:
         entity_type: Optional[str] = None,
     ) -> None:
         data = self._load_tracking_entities(model, entity_name)
-        self._export_entities(
-            data, output_path, entity_name, entity_type=entity_type
-        )
+        
+        logger.info(f"Exporting {len(data)} {entity_name}...")
+        try:
+            export_data = []
+            for item in data:
+                item_dict = self._item_to_export_dict(item)
+                for key in ["raw_payload_json", "value_json", "changed_fields_json", "before_json", "after_json"]:
+                    if key in item_dict and item_dict[key] is not None:
+                        item_dict[key] = sanitize_payload(item_dict[key])
+                export_data.append(item_dict)
+                
+            export_data = self._enrich_export_rows(export_data, entity_type=entity_type)
+            self.sink.export(export_data, output_path)
+            logger.info(f"Successfully exported {entity_name} to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to export {entity_name}: {e}")
+            raise e
 
     def export_organizations(self, output_path: str):
         """
