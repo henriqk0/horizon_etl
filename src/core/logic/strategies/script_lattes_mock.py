@@ -4,10 +4,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class ScriptLattesMock:
     """
     Mocks the behavior of the scriptLattes library for development and testing.
     """
+
     def run(self, config_file: str, list_file: str) -> None:
         """
         Simulates the scriptLattes execution.
@@ -15,9 +17,9 @@ class ScriptLattesMock:
         and generates dummy JSON files for each researcher.
         """
         logger.info(f"Mocking scriptLattes execution with config={config_file} and list={list_file}")
-        
+
         # 1. Read Config to get output directory
-        output_dir = "data" # Default
+        output_dir = "data"  # Default
         if os.path.exists(config_file):
             with open(config_file, 'r') as f:
                 for line in f:
@@ -25,10 +27,10 @@ class ScriptLattesMock:
                         parts = line.split('=')
                         if len(parts) > 1:
                             output_dir = parts[1].strip()
-        
+
         # Ensure output directory exists
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # 2. Read List file to get researchers
         if os.path.exists(list_file):
             with open(list_file, 'r') as f:
@@ -36,12 +38,12 @@ class ScriptLattesMock:
                     line = line.strip()
                     if not line:
                         continue
-                    
+
                     parts = line.split(',')
                     if len(parts) >= 2:
                         lattes_id = parts[0].strip()
                         name = parts[1].strip()
-                        
+
                         # 3. Generate Mock JSON
                         self._generate_json(output_dir, lattes_id, name)
         else:
@@ -103,7 +105,7 @@ class ScriptLattesMock:
                 }
             ]
         }
-        
+
         file_path = os.path.join(output_dir, f"{lattes_id}.json")
         with open(file_path, 'w') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)

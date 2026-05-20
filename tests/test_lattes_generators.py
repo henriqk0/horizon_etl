@@ -1,5 +1,3 @@
-import os
-import pytest
 from src.core.logic.lattes_generators import LattesConfigGenerator, LattesListGenerator
 
 

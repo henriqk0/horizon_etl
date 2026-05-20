@@ -1,6 +1,5 @@
 import sqlite3
 
-import pytest
 
 from src.core.logic.pii_anonymizer import is_anonymized_cpf, is_anonymized_email
 from src.flows.maintenance.anonymize_backfill import (
@@ -17,6 +16,7 @@ def _make_conn(sql: str) -> sqlite3.Connection:
 
 
 # --- _discover_pii_columns ---
+
 
 def test_discover_pii_columns_finds_identification_id():
     conn = _make_conn(
@@ -52,6 +52,7 @@ def test_discover_pii_columns_multiple_tables():
 
 
 # --- _anonymize_table_column ---
+
 
 def test_anonymize_table_column_anonymizes_cpf():
     conn = _make_conn("""
@@ -134,6 +135,7 @@ def test_anonymize_table_column_stats_correct():
 
 
 # --- audit_pii ---
+
 
 def test_audit_pii_runs_without_error(tmp_path):
     db_path = str(tmp_path / "test.db")

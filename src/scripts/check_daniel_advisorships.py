@@ -13,11 +13,11 @@ def check_daniel():
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # 1. Find Daniel
     cursor.execute("SELECT id, name FROM persons WHERE name LIKE '%Daniel Cruz Cavalieri%'")
     results = cursor.fetchall()
-    
+
     if not results:
         print("Daniel Cruz Cavalieri not found in persons table.")
         # Try finding by short name or parts
@@ -26,11 +26,11 @@ def check_daniel():
         if not results:
              print("No one with 'Cavalieri' found either.")
              return
-    
+
     for row in results:
         person_id, name = row
         print(f"Found person: ID={person_id}, Name={name}")
-        
+
         # 2. Check advisorships for this person as supervisor
         cursor.execute("""
             SELECT a.id, i.name, a.type, i.status

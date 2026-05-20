@@ -13,8 +13,7 @@ from research_domain import (
     CampusController,
     KnowledgeAreaController,
     ResearchGroupController,
-)
-# Workaround: Import directly from controllers module since not exported in __init__
+)  # Workaround: Import directly from controllers module since not exported in __init__
 from research_domain.controllers.controllers import (
     AdvisorshipController,
     FellowshipController,
@@ -38,23 +37,23 @@ class ProjectLoader:
 
     def __init__(self, mapping_strategy):
         self.mapping_strategy = mapping_strategy
-        
+
         # Controllers
         self.controller = InitiativeController()
         self.person_controller = PersonController()
         self.team_controller = TeamController()
         self.rg_controller = ResearchGroupController()
         self.adv_controller = AdvisorshipController()
-        
+
         # Service/Logic Classes
         self.entity_manager = EntityManager(self.controller, self.person_controller)
         self.person_matcher = PersonMatcher(self.person_controller)
-        
+
         # Initialize Roles and Cache
         roles_cache = self.entity_manager.ensure_roles()
-        
+
         self.team_synchronizer = TeamSynchronizer(self.team_controller, roles_cache)
-        
+
         self.linker = InitiativeLinker(
             initiative_controller=self.controller,
             rg_controller=self.rg_controller,
@@ -63,7 +62,7 @@ class ProjectLoader:
             team_synchronizer=self.team_synchronizer,
             entity_manager=self.entity_manager
         )
-        
+
         # Handlers registry
         self.handlers = {
             Initiative: StandardProjectHandler(self.controller),
@@ -71,7 +70,7 @@ class ProjectLoader:
                 self.controller, self.person_matcher, self.entity_manager
             ),
         }
-        
+
         # Ensure base environment
         self.initiative_type = self.entity_manager.ensure_initiative_type("Research Project")
         self.org_id = self.entity_manager.ensure_organization()
@@ -88,7 +87,7 @@ class ProjectLoader:
         except Exception as e:
             logger.error(f"Failed to read Excel file {file_path}: {e}")
             return
-            
+
         records = df.to_dict('records')
         self.process_records(records, source_file=file_path)
 
@@ -139,15 +138,15 @@ class ProjectLoader:
         This fixes orphans and ensures consistency across all years.
         """
         logger.info("Recalculating dates and status for all parent projects from Database...")
-        
+
         from sqlalchemy import text
         from datetime import datetime, date
-        
+
         session = self.controller._service._repository._session
-        
+
         # Aggregate dates for all parents that have advisorships
         query = text("""
-            SELECT 
+            SELECT
                 i.parent_id,
                 MIN(i.start_date) as min_start,
                 MAX(i.end_date) as max_end
@@ -156,12 +155,12 @@ class ProjectLoader:
             WHERE i.parent_id IS NOT NULL
             GROUP BY i.parent_id
         """)
-        
+
         results = session.execute(query).fetchall()
-        
+
         processed_count = 0
         updated_count = 0
-        
+
         def ensure_datetime(val):
             if not val:
                  return None
@@ -183,60 +182,60 @@ class ProjectLoader:
                  except ValueError:
                      pass
             return None
-        
+
         for row in results:
             parent_id = row.parent_id
             min_start = ensure_datetime(row.min_start)
             max_end = ensure_datetime(row.max_end)
-            
+
             if not parent_id:
                 continue
-                
+
             processed_count += 1
-            
+
             # Determine status
-            status = "Unknown"
-            new_status = "Active"
+            status = "Unknown"  # noqa: F841
+            new_status = "Active"  # noqa: F841
             if max_end:
                  # Check if max_end is in the past
                  # Ensure max_end is comparable (datetime)
                  target_date = max_end
-                 if hasattr(max_end, 'date'): # datetime object
+                 if hasattr(max_end, 'date'):  # datetime object
                      target_date = max_end
                  elif isinstance(max_end, str):
                      try:
                          target_date = datetime.fromisoformat(max_end)
-                     except:
+                     except Exception:
                          pass
-                 
+
                  if isinstance(target_date, datetime):
                      if target_date < datetime.now():
-                         new_status = "Concluded"
-                 elif hasattr(target_date, 'year'): # date object
+                         new_status = "Concluded"  # noqa: F841
+                 elif hasattr(target_date, 'year'):  # date object
                      if target_date < datetime.now().date():
-                         new_status = "Concluded"
+                         new_status = "Concluded"  # noqa: F841
 
             # Fetch parent initiative to check if update is needed
             parent = self.controller.get_by_id(parent_id)
             if not parent:
                 continue
-                
+
             # Check if any change is needed
             # Note: We need to handle potential None/types mismatch for comparison or just update
             # Since this is a bulk fix operation, we can just update if distinct
-            
+
             needs_update = False
-            
+
             # Non-destructive update for start_date: only if earlier than current
             if min_start and (not parent.start_date or min_start < parent.start_date):
                  parent.start_date = min_start
                  needs_update = True
-                 
+
             # Non-destructive update for end_date: only if later than current
             if max_end and (not parent.end_date or max_end > parent.end_date):
                  parent.end_date = max_end
                  needs_update = True
-            
+
             # Recalculate status based on the RESULTING end_date (if it was "Unknown" or "Active/Concluded")
             if parent.end_date:
                 # Map Concluded/Active based on time
@@ -245,15 +244,15 @@ class ProjectLoader:
                     calculated_status = "Active"
                     if parent.end_date < datetime.now():
                         calculated_status = "Concluded"
-                    
+
                     if parent.status != calculated_status:
                         parent.status = calculated_status
                         needs_update = True
-            
+
             if needs_update:
                 self.controller.update(parent)
                 updated_count += 1
-        
+
         logger.info(f"Recalculation complete. Processed {processed_count} parents, updated {updated_count}.")
 
     def _process_row(
@@ -299,19 +298,19 @@ class ProjectLoader:
                 identity_key=parent_identity,
                 title=parent_title,
             )
-            
+
             if not parent_initiative:
                 # Create parent via Standard Handler
                 logger.info(f"Creating parent Research Project: {parent_title}")
-                
+
                 # Ensure we have the "Research Project" type for the parent
                 res_proj_type = self.entity_manager.ensure_initiative_type("Research Project")
-                
+
                 # Initial creation without dates - will be fixed by recalculate_all_parent_statuses
                 parent_initiative = self.handlers[Initiative].create_or_update(
                     project_data={
                         "title": parent_title,
-                        "status": "Unknown" # Temporary
+                        "status": "Unknown"  # Temporary
                     },
                     existing_initiative=None,
                     initiative_type_name="Research Project",
@@ -327,7 +326,7 @@ class ProjectLoader:
                 parent_identity_resolved = get_existing_initiative_identity(parent_initiative)
                 if parent_identity_resolved:
                     existing_by_identity[parent_identity_resolved] = parent_initiative
-            
+
             parent_id = parent_initiative.id
 
         # 3. UPSERT Initiative
@@ -349,7 +348,7 @@ class ProjectLoader:
 
         if not existing:
             stats["created"] += 1
-            if initiative: 
+            if initiative:
                 self._register_existing_initiative(
                     existing_by_name=existing_by_name,
                     title=title,
@@ -425,7 +424,7 @@ class ProjectLoader:
             rg_name = project_data.get("research_group_name")
             if rg_name and isinstance(rg_name, str) and rg_name.strip():
                 self.linker.link_research_group(
-                    initiative, rg_name, project_data, 
+                    initiative, rg_name, project_data,
                     project_data.get("campus_name"), self.org_id
                 )
 

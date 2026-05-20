@@ -10,6 +10,7 @@ from eo_lib.domain.base import Base
 from eo_lib.domain.entities import *
 from research_domain.domain.entities import *
 
+
 def init_db():
     print("Initializing database...")
     client = PostgresClient()

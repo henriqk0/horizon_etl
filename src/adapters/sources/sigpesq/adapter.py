@@ -14,6 +14,7 @@ _SIGPESQ_MAX_RETRIES = int(os.getenv("SIGPESQ_MAX_RETRIES", "3"))
 
 
 class SigPesqAdapter(ISource):
+
     def __init__(self, download_dir: str = "data/raw/sigpesq"):
         self.download_dir = download_dir
         os.makedirs(self.download_dir, exist_ok=True)
@@ -173,6 +174,7 @@ class SigPesqAdapter(ISource):
             return
 
         async def login_with_http_429_logging(page):
+
             def log_rate_limit_response(response):
                 if getattr(response, "status", None) != 429:
                     return

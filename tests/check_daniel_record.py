@@ -8,7 +8,7 @@ SUPERVISOR_ROLE = "Supervisor"
 def check_daniel_status():
     exporter = CanonicalDataExporter(sink=None)
     session = exporter.initiative_ctrl._service._repository._session
-    
+
     # 1. Find Daniel's ID
     name = "Daniel Cruz Cavalieri"
     res = session.execute(text("SELECT id, name FROM persons WHERE LOWER(name) LIKE :n"), {"n": f"%{name.lower()}%"}).fetchall()
@@ -22,7 +22,7 @@ def check_daniel_status():
     # 2. Check specific title
     title = "CLASSIFICAÇÃO DE NOTAS MUSICAIS UTILIZANDO A TRANSFORMADA WAVELET E REDES NEURAIS ARTIFICIAIS"
     print(f"\nChecking Title: {title}")
-    
+
     query = text("""
         SELECT i.id, i.name, a.type, am.person_id AS supervisor_id
         FROM initiatives i
@@ -36,7 +36,7 @@ def check_daniel_status():
         query,
         {"t": title, "supervisor_role": SUPERVISOR_ROLE},
     ).fetchone()
-    
+
     if row:
         print(f"Found: ID={row.id}, Type={row.type}, SupervisorID={row.supervisor_id}")
         if row.supervisor_id == daniel_id:

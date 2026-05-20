@@ -1,13 +1,14 @@
-from typing import List, Optional
+from typing import Optional
 
 from eo_lib.controllers.organization_controller import OrganizationController
 from loguru import logger
-from research_domain import CampusController, ResearchGroup, ResearchGroupController
+from research_domain import CampusController, ResearchGroupController
 
 from src.core.ports.export_sink import IExportSink
 
 
 class ResearchGroupExporter:
+
     def __init__(self, sink: IExportSink):
         self.sink = sink
         self.rg_ctrl = ResearchGroupController()
@@ -156,10 +157,10 @@ class ResearchGroupExporter:
                             or "líder" in role_name.lower()
                         ):
                             # Deduplication logic for leaders
-                            leaders_seen_ids = {l["id"] for l in leaders_list}
+                            leaders_seen_ids = {l["id"] for leader in leaders_list}  # noqa: F841
 
                             is_already_leader = False
-                            for l in leaders_list:
+                            for leader in leaders_list:
                                 if l["id"] == member_obj["id"]:
                                     is_already_leader = True
                                     break

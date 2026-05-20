@@ -10,6 +10,7 @@ from eo_lib.domain.base import Base
 from eo_lib.domain.entities import *
 from research_domain.domain.entities import *
 
+
 def recreate_db():
     print("Dropping all tables...")
     client = PostgresClient()

@@ -1,11 +1,12 @@
 import re
 import unicodedata
-from typing import Any, Dict, List, Optional
+from typing import Dict, Optional
 
 from thefuzz import fuzz, process
 
 
 class MockPerson:
+
     def __init__(self, id, name):
         self.id = id
         self.name = name

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 from datetime import datetime
 
 from .base import ProjectMappingStrategy
@@ -27,14 +27,14 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
         """
         start_year = row.get("start_year")
         end_year = row.get("end_year")
-        
+
         start_date = None
         if start_year:
             try:
                 start_date = datetime.strptime(f"{start_year}-01-01", "%Y-%m-%d")
             except ValueError:
                 pass
-                
+
         end_date = None
         if end_year:
             try:
@@ -44,17 +44,17 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
 
         # Identify roles from raw members
         raw_members = row.get("raw_members", [])
-        
+
         coordinator_name = None
         student_names = []
         researcher_names = []
-        
+
         for m in raw_members:
             m_name = m.get("nome", "")
             m_role = m.get("papel", "Integrante").lower()
-            
+
             if "coordenador" in m_role:
-                if not coordinator_name: 
+                if not coordinator_name:
                     coordinator_name = m_name
                 else:
                     researcher_names.append(m_name)
@@ -62,7 +62,7 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
                 student_names.append(m_name)
             else:
                 researcher_names.append(m_name)
-                
+
         # If no coordinator found but target researcher is marked as coordinator in Lattes
         if not coordinator_name and (row.get("role") == "Coordenador" or self.researcher_roles.get(row.get("name")) == "Coordenador"):
             coordinator_name = self.target_researcher_name
@@ -94,22 +94,22 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
 
         return {
             "title": row.get("name"),
-            "status": row.get("status"), # Lattes parser standardizes this
+            "status": row.get("status"),  # Lattes parser standardizes this
             "start_date": start_date,
             "end_date": end_date,
             "description": row.get("description"),
-            "value": 0.0, # Lattes doesn't reliably provide project value
+            "value": 0.0,  # Lattes doesn't reliably provide project value
             "coordinator_name": coordinator_name,
             "researcher_names": researcher_names,
             "student_names": student_names,
-            "research_group_name": None, # Lattes doesn't link projects to research groups reliably
+            "research_group_name": None,  # Lattes doesn't link projects to research groups reliably
             "metadata": {
                 "external_partner": sponsor_name,
                 "project_nature": row.get("nature"),
                 "initiative_type_name": row.get("initiative_type_name"),
                 "source_system": "lattes_projects",
             },
-            "campus_name": None, # Lattes doesn't provide campus
+            "campus_name": None,  # Lattes doesn't provide campus
             "identity_key": build_identity_key(
                 [
                     "lattes_project",

@@ -4,7 +4,6 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
-from platform import system
 from typing import Callable, Dict, List
 
 from loguru import logger
@@ -26,11 +25,7 @@ class ScriptLattesRuntimeError(RuntimeError):
 
 # from research_domain_lib.repository.researcher_repository import ResearcherRepository
 
-# Mocking repository access for standalone flow execution if needed,
-# but in real scenario this should inject the repo.
-# For now, I'll assume we can get data.
-# Since I cannot easily instantiate the real repository without DB connection in this "one-shot" agent,
-# I'll create a task that *would* fetch from DB, but for now returns mock data or tries to use the repo if available.
+# Mocking repository access for standalone flow execution if needed,  # but in real scenario this should inject the repo.  # For now, I'll assume we can get data.  # Since I cannot easily instantiate the real repository without DB connection in this "one-shot" agent,  # I'll create a task that *would* fetch from DB, but for now returns mock data or tries to use the repo if available.
 
 
 def clean_lattes_json_output(output_dir: str) -> int:
@@ -267,6 +262,8 @@ def prefetch_lattes_cache(
 
 
 @task
+
+
 def get_researchers_from_db() -> List[Dict]:
     """
     Fetches researchers from the database.
@@ -297,6 +294,8 @@ def get_researchers_from_db() -> List[Dict]:
 
 
 @task
+
+
 def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
     config_gen = LattesConfigGenerator()
     config_path = os.path.abspath("lattes.config")
@@ -305,6 +304,8 @@ def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
 
 
 @task
+
+
 def generate_list(researchers: List[Dict]) -> str:
     list_gen = LattesListGenerator()
     list_path = os.path.abspath("lattes.list")
@@ -313,6 +314,8 @@ def generate_list(researchers: List[Dict]) -> str:
 
 
 @task
+
+
 def run_script_lattes_real(config_path: str):
     try:
         from scriptLattes.run import executar_scriptLattes
@@ -331,6 +334,8 @@ def run_script_lattes_real(config_path: str):
 
 
 @flow(name="Download Lattes Curricula", **telegram_flow_state_handlers())
+
+
 def download_lattes_flow():
     base_dir = os.path.abspath("data")
     output_dir = os.path.join(base_dir, "lattes_json")

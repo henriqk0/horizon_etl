@@ -1,6 +1,5 @@
 import hashlib
 
-import pytest
 
 from src.core.logic.pii_anonymizer import (
     PII_COLUMN_REGISTRY,
@@ -23,6 +22,7 @@ def _sha(value: str) -> str:
 
 
 # --- anonymize_cpf ---
+
 
 def test_anonymize_cpf_returns_lgpd_prefix():
     result = anonymize_cpf("12345678901")
@@ -59,6 +59,7 @@ def test_anonymize_cpf_invalid_cpf_still_anonymized():
 
 # --- anonymize_email ---
 
+
 def test_anonymize_email_returns_anon_lgpd_suffix():
     result = anonymize_email("user@example.com")
     assert result.endswith("@anon.lgpd")
@@ -88,6 +89,7 @@ def test_anonymize_email_empty_string_returns_none():
 
 # --- anonymize_field ---
 
+
 def test_anonymize_field_cpf():
     result = anonymize_field("12345678901", "cpf")
     assert result.startswith("LGPD-")
@@ -103,6 +105,7 @@ def test_anonymize_field_unknown_type_passthrough():
 
 
 # --- anonymize_person_data ---
+
 
 def test_anonymize_person_data_masks_identification_id():
     result = anonymize_person_data({"identification_id": "12345678901", "name": "Alice"})
@@ -149,6 +152,7 @@ def test_anonymize_person_data_all_registry_keys_masked():
 
 # --- is_anonymized_cpf ---
 
+
 def test_is_anonymized_cpf_true_for_lgpd_prefix():
     assert is_anonymized_cpf("LGPD-abc123")
 
@@ -163,6 +167,7 @@ def test_is_anonymized_cpf_false_for_none():
 
 # --- is_anonymized_email ---
 
+
 def test_is_anonymized_email_true_for_anon_lgpd():
     assert is_anonymized_email("abc123@anon.lgpd")
 
@@ -176,6 +181,7 @@ def test_is_anonymized_email_false_for_none():
 
 
 # --- idempotency ---
+
 
 def test_double_anonymize_cpf_is_idempotent():
     first = anonymize_cpf("12345678901")

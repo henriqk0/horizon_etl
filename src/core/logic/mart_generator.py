@@ -15,6 +15,7 @@ from src.core.logic.export_campus_resolver import ExportCampusResolver
 
 
 class KnowledgeAreaMartGenerator:
+
     def __init__(self):
         self.ka_ctrl = KnowledgeAreaController()
         self.rg_ctrl = ResearchGroupController()

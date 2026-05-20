@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 from datetime import datetime
 
 from .base import ProjectMappingStrategy
@@ -32,14 +32,14 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
         """
         start_year = row.get("start_year")
         end_year = row.get("end_year")
-        
+
         start_date = None
         if start_year:
             try:
                 start_date = datetime.strptime(f"{start_year}-01-01", "%Y-%m-%d")
             except ValueError:
                 pass
-                
+
         end_date = None
         if end_year:
             try:
@@ -50,12 +50,12 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
         # Lattes specifies the student directly
         student_name = row.get("student_name")
         student_names = [student_name] if student_name else []
-        
+
         # Sponsorship / Fellowship
         fellowship_data = None
         sponsor_name = row.get("sponsor_name")
         fellowship_name = row.get("fellowship_name")
-        
+
         if sponsor_name or fellowship_name:
             # Clean up default empty strings
             f_name = fellowship_name if fellowship_name else f"Bolsa - {row.get('type_name', 'Unknown')}"
@@ -68,11 +68,11 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
 
         return {
             "title": row.get("title") or "Untitled Advisorship",
-            "status": row.get("status"), # Lattes parser standardizes to Active/Concluded
+            "status": row.get("status"),  # Lattes parser standardizes to Active/Concluded
             "start_date": start_date,
             "end_date": end_date,
             "description": row.get("type_name", ""),
-            "coordinator_name": self.advisor_name, # Preserve original spelling for matching
+            "coordinator_name": self.advisor_name,  # Preserve original spelling for matching
             "student_names": student_names,
             "research_group_name": None,
             "metadata": {
@@ -82,7 +82,7 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
             },
             "campus_name": None,
             "model_class": Advisorship,
-            "initiative_type_name": "Advisorship", # Hardcoded type for the schema
+            "initiative_type_name": "Advisorship",  # Hardcoded type for the schema
             "fellowship_data": fellowship_data,
             "identity_key": build_identity_key(
                 [

@@ -2,7 +2,6 @@ import json
 import os
 from unittest.mock import MagicMock
 
-import pytest
 from pydantic import BaseModel
 
 from src.adapters.sinks.json_sink import JsonSink
@@ -14,6 +13,7 @@ class MockModel(BaseModel):
 
 
 class MockAlchemyModel:
+
     def __init__(self, **kwargs):
         self.__table__ = MagicMock()
         self.__table__.columns = []
