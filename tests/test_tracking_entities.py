@@ -1,11 +1,11 @@
 from datetime import date, datetime
 
 import pytest
+from eo_lib.domain.base import Base
+from libbase.infrastructure.sql_repository import GenericSqlRepository
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from eo_lib.domain.base import Base
-from libbase.infrastructure.sql_repository import GenericSqlRepository
 from src.tracking.context import current_ingestion_run_id
 from src.tracking.controllers import (
     AttributeAssertionController,
@@ -146,7 +146,10 @@ def test_tracking_recorder_serializes_temporal_json_values():
             canonical_entity_id=1,
             operation="update",
             changed_fields=["observed_at", "end_date"],
-            before={"observed_at": observed_at, "end_date": datetime(2026, 3, 29, 0, 0)},
+            before={
+                "observed_at": observed_at,
+                "end_date": datetime(2026, 3, 29, 0, 0),
+            },
             after={"observed_at": observed_at, "end_date": ended_on},
             reason="Normalize temporal fields",
         )

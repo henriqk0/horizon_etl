@@ -26,7 +26,9 @@ def create_researcher_with_resume_fallback(
     pii = anonymize_person_data({"identification_id": identification_id})
     identification_id = pii["identification_id"]
     if emails:
-        emails = [anonymize_person_data({"email": e})["email"] for e in emails if e] or None
+        emails = [
+            anonymize_person_data({"email": e})["email"] for e in emails if e
+        ] or None
 
     try:
         return researcher_ctrl.create_researcher(

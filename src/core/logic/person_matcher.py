@@ -52,11 +52,15 @@ class PersonMatcher:
                     canonical_name = self.canonicalize_name(name)
                     if canonical_name:
                         current = self._canonical_cache.get(canonical_name)
-                        if current is None or self._person_quality_score(p) > self._person_quality_score(current):
+                        if current is None or self._person_quality_score(
+                            p
+                        ) > self._person_quality_score(current):
                             self._canonical_cache[canonical_name] = p
                 if email:
                     self._emails_cache[email.lower()] = p
-            logger.info(f"Loaded {len(self._persons_cache)} persons and {len(self._emails_cache)} emails into cache")
+            logger.info(
+                f"Loaded {len(self._persons_cache)} persons and {len(self._emails_cache)} emails into cache"
+            )
         except Exception as e:
             logger.warning(f"Failed to preload persons cache: {e}")
 
@@ -107,8 +111,18 @@ class PersonMatcher:
     def _person_quality_score(self, person: Person) -> int:
         """Prefers the richer record when duplicates share the same canonical name."""
         score = 0
-        for attr in ("identification_id", "email", "resume", "citation_names", "cnpq_url"):
-            value = person.get(attr) if isinstance(person, dict) else getattr(person, attr, None)
+        for attr in (
+            "identification_id",
+            "email",
+            "resume",
+            "citation_names",
+            "cnpq_url",
+        ):
+            value = (
+                person.get(attr)
+                if isinstance(person, dict)
+                else getattr(person, attr, None)
+            )
             if value:
                 score += 10
         return score
@@ -206,7 +220,9 @@ class PersonMatcher:
             self._persons_cache[name] = person
             if canonical_input:
                 current = self._canonical_cache.get(canonical_input)
-                if current is None or self._person_quality_score(person) > self._person_quality_score(current):
+                if current is None or self._person_quality_score(
+                    person
+                ) > self._person_quality_score(current):
                     self._canonical_cache[canonical_input] = person
             if email:
                 self._emails_cache[email.strip().lower()] = person

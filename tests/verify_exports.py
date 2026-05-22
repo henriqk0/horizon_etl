@@ -6,7 +6,9 @@ def verify_exports():
     with open("data/exports/researchers_canonical.json", "r") as f:
         researchers = json.load(f)
 
-    daniel = next((r for r in researchers if "Daniel Cruz Cavalieri" in r["name"]), None)
+    daniel = next(
+        (r for r in researchers if "Daniel Cruz Cavalieri" in r["name"]), None
+    )
 
     if not daniel:
         print("ERROR: Daniel not found in researchers_canonical.json")
@@ -43,14 +45,17 @@ def verify_exports():
                 daniel_adv_count += 1
             # Check nested
             elif "advisorships" in item:
-                 for sub in item["advisorships"]:
-                     if "Daniel" in sub.get("supervisor_name", ""):  # Loose match
-                         daniel_adv_count += 1
+                for sub in item["advisorships"]:
+                    if "Daniel" in sub.get("supervisor_name", ""):  # Loose match
+                        daniel_adv_count += 1
 
-        print(f"Advisorships found in 'advisorships_canonical.json': {daniel_adv_count}")
+        print(
+            f"Advisorships found in 'advisorships_canonical.json': {daniel_adv_count}"
+        )
 
     except FileNotFoundError:
         print("advisorships_canonical.json not found.")
+
 
 if __name__ == "__main__":
     verify_exports()

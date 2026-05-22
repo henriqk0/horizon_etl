@@ -4,7 +4,7 @@ import sys
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from research_domain import ResearcherController, Researcher
+from research_domain import Researcher, ResearcherController
 
 
 def seed_researchers():
@@ -16,10 +16,11 @@ def seed_researchers():
     ctrl = ResearcherController()
     # Ensure tables exist for seeding
     from eo_lib.domain.base import Base
+
     # Force creation of tables
-    if hasattr(ctrl, 'client') and ctrl.client.engine:
-         Base.metadata.create_all(ctrl.client.engine)
-         print("Tables created.")
+    if hasattr(ctrl, "client") and ctrl.client.engine:
+        Base.metadata.create_all(ctrl.client.engine)
+        print("Tables created.")
 
     with open(list_path, "r") as f:
         for line in f:
@@ -32,7 +33,14 @@ def seed_researchers():
                 name = parts[1].strip()
 
                 # Check if exists
-                existing = next((r for r in ctrl.get_all() if getattr(r, "brand_id", "") == lattes_id), None)
+                existing = next(
+                    (
+                        r
+                        for r in ctrl.get_all()
+                        if getattr(r, "brand_id", "") == lattes_id
+                    ),
+                    None,
+                )
                 if not existing:
                     # Create
                     print(f"Creating researcher: {name} ({lattes_id})")
@@ -60,6 +68,7 @@ def seed_researchers():
                         print(f"Error creating {name}: {e}")
                 else:
                     print(f"Researcher exists: {name}")
+
 
 if __name__ == "__main__":
     seed_researchers()

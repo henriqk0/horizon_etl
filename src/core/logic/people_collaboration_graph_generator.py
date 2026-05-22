@@ -33,7 +33,12 @@ class PeopleCollaborationGraphGenerator:
         if node_filter is not None:
             before = len(people)
             people = [p for p in people if node_filter(p)]
-            logger.info("Node filter '{}': {} → {} people", node_filter_label or "custom", before, len(people))
+            logger.info(
+                "Node filter '{}': {} → {} people",
+                node_filter_label or "custom",
+                before,
+                len(people),
+            )
 
         G = nx.Graph()
 

@@ -1,6 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-
 from src.core.logic.research_group_exporter import ResearchGroupExporter
 from src.core.ports.export_sink import IExportSink
 

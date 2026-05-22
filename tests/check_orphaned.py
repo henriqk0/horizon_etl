@@ -1,4 +1,5 @@
 from sqlalchemy import text
+
 from src.core.logic.canonical_exporter import CanonicalDataExporter
 
 
@@ -7,12 +8,14 @@ def check_orphaned_initiatives():
     session = exporter.initiative_ctrl._service._repository._session
 
     # Title known to have failed:
-    title = 'Desenvolvimento de Materiais Didáticos Inovadores Para o Ensino de Disciplinas Técnicas com Tecnologias da Indústria 4.0'
+    title = "Desenvolvimento de Materiais Didáticos Inovadores Para o Ensino de Disciplinas Técnicas com Tecnologias da Indústria 4.0"
 
     print(f"Checking Title: {title}")
 
     # Check in Initiatives
-    query_init = text("SELECT id, name, initiative_type_id FROM initiatives WHERE LOWER(name) = LOWER(:t)")
+    query_init = text(
+        "SELECT id, name, initiative_type_id FROM initiatives WHERE LOWER(name) = LOWER(:t)"
+    )
     init = session.execute(query_init, {"t": title}).fetchone()
 
     if init:
@@ -43,10 +46,15 @@ def check_orphaned_initiatives():
         if adv:
             print(f"Found in ADVISORSHIPS: Type={adv.type}")
         else:
-             print("NOT found in ADVISORSHIPS table! (Orphaned Initiative / Wrong Class)")
+            print(
+                "NOT found in ADVISORSHIPS table! (Orphaned Initiative / Wrong Class)"
+            )
 
     else:
-        print("NOT found in INITIATIVES table (Strange, considering Unique Constraint error)")
+        print(
+            "NOT found in INITIATIVES table (Strange, considering Unique Constraint error)"
+        )
+
 
 if __name__ == "__main__":
     check_orphaned_initiatives()

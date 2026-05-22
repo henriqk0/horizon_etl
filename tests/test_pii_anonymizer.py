@@ -1,6 +1,5 @@
 import hashlib
 
-
 from src.core.logic.pii_anonymizer import (
     PII_COLUMN_REGISTRY,
     anonymize_cpf,
@@ -108,7 +107,9 @@ def test_anonymize_field_unknown_type_passthrough():
 
 
 def test_anonymize_person_data_masks_identification_id():
-    result = anonymize_person_data({"identification_id": "12345678901", "name": "Alice"})
+    result = anonymize_person_data(
+        {"identification_id": "12345678901", "name": "Alice"}
+    )
     assert result["identification_id"].startswith("LGPD-")
     assert result["name"] == "Alice"
 

@@ -8,24 +8,28 @@ from prefect.client.schemas import TaskRun
 from prefect.events.clients import NullEventsClient
 from prefect.events.worker import EventsWorker
 
+from src.flows.prefect_runtime import configure_prefect_runtime
 from src.prefect_runtime import (
     disable_prefect_events_client,
     patch_prefect_task_run_payloads,
 )
-from src.flows.prefect_runtime import configure_prefect_runtime
 
 
 def test_configure_prefect_runtime_disables_events_for_local_server(monkeypatch):
     monkeypatch.setenv("PREFECT_API_URL", "http://127.0.0.1:4200/api")
     monkeypatch.delenv("PREFECT_API_KEY", raising=False)
 
-    with patch("src.flows.prefect_runtime.disable_prefect_events_client", return_value=True) as disable:
+    with patch(
+        "src.flows.prefect_runtime.disable_prefect_events_client", return_value=True
+    ) as disable:
         assert configure_prefect_runtime() is True
         disable.assert_called_once_with()
 
 
 def test_configure_prefect_runtime_keeps_events_for_non_local_urls(monkeypatch):
-    monkeypatch.setenv("PREFECT_API_URL", "https://api.prefect.cloud/api/accounts/x/workspaces/y")
+    monkeypatch.setenv(
+        "PREFECT_API_URL", "https://api.prefect.cloud/api/accounts/x/workspaces/y"
+    )
     monkeypatch.delenv("PREFECT_API_KEY", raising=False)
 
     with patch("src.flows.prefect_runtime.disable_prefect_events_client") as disable:

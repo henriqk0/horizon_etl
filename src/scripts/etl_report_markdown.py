@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 JSON_REPORT_PATH = Path("data/reports/etl_load_report.json")
 MARKDOWN_REPORT_PATH = Path("data/reports/etl_load_report.md")
 
@@ -83,7 +82,14 @@ def _section_lattes_summary(report: dict) -> str:
         f"- Curriculos nao resolvidos: **{_fmt_int(len(lattes['unresolved_files']))}**",
         "",
         _table(
-            ["Entidade", "Extraido", "Persistido", "Casado", "Faltando no banco", "Extras no banco"],
+            [
+                "Entidade",
+                "Extraido",
+                "Persistido",
+                "Casado",
+                "Faltando no banco",
+                "Extras no banco",
+            ],
             rows,
         ),
     ]

@@ -1,10 +1,10 @@
-import json
-import os
-import sys
+import json  # noqa E402
+import os  # noqa E402
+import sys  # noqa E402
 
 sys.path.append(os.getcwd())
 
-from src.core.logic.duplicate_auditor import DuplicateAuditor
+from src.core.logic.duplicate_auditor import DuplicateAuditor  # noqa E402
 
 
 def main():

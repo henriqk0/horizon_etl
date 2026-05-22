@@ -1,8 +1,17 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, JSON, String, UniqueConstraint
+from eo_lib.domain.base import Base
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from eo_lib.domain.base import Base
 
 
 class AttributeAssertion(Base):
@@ -39,6 +48,8 @@ class AttributeAssertion(Base):
     value_hash = Column(String(255), nullable=False, index=True)
     is_selected = Column(Boolean, nullable=False, default=False, index=True)
     selection_reason = Column(String(255), nullable=True)
-    asserted_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    asserted_at = Column(
+        DateTime, nullable=False, server_default=func.now(), index=True
+    )
 
     source_record = relationship("SourceRecord", back_populates="attribute_assertions")

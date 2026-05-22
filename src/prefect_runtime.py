@@ -135,8 +135,8 @@ def disable_prefect_events_client() -> bool:
     """Route Prefect event traffic to a no-op client when supported."""
 
     try:
-        from prefect.events.clients import NullEventsClient
         import prefect.events.worker as events_worker
+        from prefect.events.clients import NullEventsClient
     except Exception:
         return False
 

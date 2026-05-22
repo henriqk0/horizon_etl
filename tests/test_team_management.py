@@ -5,7 +5,6 @@ import pytest
 from src.core.logic.entity_manager import EntityManager
 from src.core.logic.project_loader import ProjectLoader
 
-
 # Mock classes for controllers
 
 
@@ -24,8 +23,6 @@ class MockTeam:
 
 
 @pytest.fixture
-
-
 def project_loader():
     with (
         patch("src.core.logic.entity_manager.PostgresClient"),
@@ -67,18 +64,16 @@ def test_create_initiative_team_idempotent(project_loader):
 
 
 @patch("src.core.logic.entity_manager.PostgresClient")
-
-
 @patch("src.core.logic.entity_manager.RoleController")
-
-
 def test_ensure_roles_exist(mock_role_ctrl, mock_pg_client, project_loader):
     """Test that mandatory roles are ensured to exist."""
     session = MagicMock()
     mock_pg_client.return_value.get_session.return_value = session
 
     # Force failure in RoleController instance to trigger fallback
-    project_loader.entity_manager.role_controller.get_all.side_effect = Exception("DB Connection Failed")
+    project_loader.entity_manager.role_controller.get_all.side_effect = Exception(
+        "DB Connection Failed"
+    )
 
     # Mock no roles exist in fallback query
     session.query.return_value.filter_by.return_value.first.return_value = None

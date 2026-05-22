@@ -1,6 +1,5 @@
 from contextvars import ContextVar
 
-
 current_ingestion_run_id: ContextVar[int | None] = ContextVar(
     "current_ingestion_run_id", default=None
 )

@@ -1,13 +1,13 @@
+import os  # noqa E402
+import sys  # noqa E402
 
-import sys
-import os
-from sqlalchemy import inspect
-from loguru import logger
+from loguru import logger  # noqa E402
+from sqlalchemy import inspect  # noqa E402
 
 sys.path.append(os.getcwd())
 
-from eo_lib.infrastructure.database.postgres_client import PostgresClient
 from eo_lib.domain.base import Base
+from eo_lib.infrastructure.database.postgres_client import PostgresClient
 
 # Import all models to register them  # Import others if needed?
 
@@ -49,6 +49,7 @@ def debug_metadata():
         logger.info("SUCCESS: education_types exists.")
     else:
         logger.error("FAILURE: education_types missing after create_all.")
+
 
 if __name__ == "__main__":
     debug_metadata()

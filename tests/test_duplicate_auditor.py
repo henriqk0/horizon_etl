@@ -27,4 +27,6 @@ def test_duplicate_auditor_reports_canonical_duplicates(tmp_path: Path):
     report = DuplicateAuditor(str(db_path)).run()
 
     assert len(report["persons_by_canonical_name"]) == 1
-    assert report["persons_by_canonical_name"][0]["canonical"] == "gustavo maia de almeida"
+    assert (
+        report["persons_by_canonical_name"][0]["canonical"] == "gustavo maia de almeida"
+    )

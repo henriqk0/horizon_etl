@@ -10,7 +10,9 @@ from src.tracking.services import IngestionRunService
 
 class IngestionRunController(GenericController[IngestionRun]):
     def __init__(self, service: Optional[IngestionRunService] = None):
-        super().__init__(service or TrackingServiceFactory.create_ingestion_run_service())
+        super().__init__(
+            service or TrackingServiceFactory.create_ingestion_run_service()
+        )
 
     def create_run(
         self,

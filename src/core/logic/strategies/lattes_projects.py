@@ -1,9 +1,10 @@
-from typing import Any, Dict
 from datetime import datetime
+from typing import Any, Dict
 
-from .base import ProjectMappingStrategy
 from src.adapters.sources.lattes_parser import LattesParser
 from src.core.logic.initiative_identity import build_identity_key
+
+from .base import ProjectMappingStrategy
 
 
 class LattesProjectMappingStrategy(ProjectMappingStrategy):
@@ -11,7 +12,9 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
     Strategy for mapping Lattes JSON project data to canonical domain models.
     """
 
-    def __init__(self, target_researcher_name: str, researcher_roles: Dict[str, str] = None):
+    def __init__(
+        self, target_researcher_name: str, researcher_roles: Dict[str, str] = None
+    ):
         super().__init__()
         self.parser = LattesParser()
         self.target_researcher_name = target_researcher_name
@@ -64,7 +67,10 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
                 researcher_names.append(m_name)
 
         # If no coordinator found but target researcher is marked as coordinator in Lattes
-        if not coordinator_name and (row.get("role") == "Coordenador" or self.researcher_roles.get(row.get("name")) == "Coordenador"):
+        if not coordinator_name and (
+            row.get("role") == "Coordenador"
+            or self.researcher_roles.get(row.get("name")) == "Coordenador"
+        ):
             coordinator_name = self.target_researcher_name
             # remove from researchers if present
             researcher_names = [
@@ -79,18 +85,17 @@ class LattesProjectMappingStrategy(ProjectMappingStrategy):
             self.parser.normalize_title(coordinator_name)
             != self.target_researcher_name_normalized
         ):
-             if not any(
-                 self.parser.normalize_title(n)
-                 == self.target_researcher_name_normalized
-                 for n in researcher_names + student_names
-             ):
-                 researcher_names.append(self.target_researcher_name)
+            if not any(
+                self.parser.normalize_title(n) == self.target_researcher_name_normalized
+                for n in researcher_names + student_names
+            ):
+                researcher_names.append(self.target_researcher_name)
 
         # Extract sponsors
         raw_sponsors = row.get("raw_sponsors", [])
         sponsor_name = None
         if raw_sponsors:
-             sponsor_name = raw_sponsors[0].get("nome")
+            sponsor_name = raw_sponsors[0].get("nome")
 
         return {
             "title": row.get("name"),

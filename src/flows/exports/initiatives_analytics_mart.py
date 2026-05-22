@@ -1,6 +1,5 @@
 import os
 
-
 from prefect import flow, get_run_logger, task
 
 from src.core.logic.mart_generator import InitiativeAnalyticsMartGenerator
@@ -8,8 +7,6 @@ from src.notifications.telegram import telegram_flow_state_handlers
 
 
 @task(name="generate_initiative_analytics_mart_task")
-
-
 def generate_initiative_analytics_mart_task(output_path: str):
     logger = get_run_logger()
     logger.info(
@@ -23,8 +20,6 @@ def generate_initiative_analytics_mart_task(output_path: str):
 
 
 @flow(name="Export Initiative Analytics Mart Flow", **telegram_flow_state_handlers())
-
-
 def export_initiatives_analytics_mart_flow(
     output_path: str = "data/exports/initiatives_analytics_mart.json",
 ):

@@ -72,7 +72,11 @@ def resolve_researcher_by_name(
         res_name = getattr(researcher, "name", None) or ""
         res_identification = getattr(researcher, "identification_id", None) or ""
 
-        if identification_id and res_identification and str(res_identification).casefold() == str(identification_id).casefold():
+        if (
+            identification_id
+            and res_identification
+            and str(res_identification).casefold() == str(identification_id).casefold()
+        ):
             score += 200
         if res_name and res_name.casefold() == name.casefold():
             score += 150

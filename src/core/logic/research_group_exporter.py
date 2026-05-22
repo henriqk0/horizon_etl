@@ -151,19 +151,15 @@ class ResearchGroupExporter:
                             seen_members.add(person_id)
 
                         # Check for leader logic (flexible check)
-                        if (
-                            role_name
-                            and "leader" in role_name.lower()
+                        if role_name and (
+                            "leader" in role_name.lower()
                             or "líder" in role_name.lower()
                         ):
-                            # Deduplication logic for leaders
-                            leaders_seen_ids = {l["id"] for leader in leaders_list}  # noqa: F841
-
-                            is_already_leader = False
-                            for leader in leaders_list:
-                                if l["id"] == member_obj["id"]:
-                                    is_already_leader = True
-                                    break
+                            # Check if we have already added a leader with the same id
+                            is_already_leader = any(
+                                leader["id"] == member_obj["id"]
+                                for leader in leaders_list
+                            )
 
                             if not is_already_leader:
                                 leaders_list.append(member_obj)

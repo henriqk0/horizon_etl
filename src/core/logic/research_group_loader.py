@@ -8,6 +8,7 @@ from research_domain import (
     RoleController,
     UniversityController,
 )
+
 from src.core.logic.initiative_identity import normalize_text
 from src.core.logic.pii_anonymizer import anonymize_person_data
 from src.tracking.recorder import tracking_recorder
@@ -252,7 +253,13 @@ class ResearchGroupLoader:
                             canonical_entity_type="research_group",
                             canonical_entity_id=group.id,
                             operation="create",
-                            changed_fields=["name", "short_name", "campus_name", "site_url", "area_name"],
+                            changed_fields=[
+                                "name",
+                                "short_name",
+                                "campus_name",
+                                "site_url",
+                                "area_name",
+                            ],
                             after={
                                 "name": name,
                                 "short_name": sigla if pd.notna(sigla) else None,

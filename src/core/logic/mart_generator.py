@@ -1,7 +1,7 @@
-from collections import Counter
-from datetime import date
 import json
 import os
+from collections import Counter
+from datetime import date
 from typing import Optional
 
 from eo_lib import InitiativeController, TeamController
@@ -11,6 +11,7 @@ from research_domain import (
     KnowledgeAreaController,
     ResearchGroupController,
 )
+
 from src.core.logic.export_campus_resolver import ExportCampusResolver
 
 
@@ -149,7 +150,9 @@ class InitiativeAnalyticsMartGenerator:
             all_initiatives = self.initiative_ctrl.get_all()
             logger.info(f"Loaded {len(all_initiatives)} initiatives.")
             session = getattr(
-                getattr(getattr(self.initiative_ctrl, "_service", None), "_repository", None),
+                getattr(
+                    getattr(self.initiative_ctrl, "_service", None), "_repository", None
+                ),
                 "_session",
                 None,
             )
@@ -162,15 +165,18 @@ class InitiativeAnalyticsMartGenerator:
             initiative_kas_map = {}
             try:
                 from sqlalchemy import text
+
                 # Access the session from the repo inside the service inside the controller
                 # This is a bit internal-dependent but necessary without eager loading support in generic controller
                 session = self.initiative_ctrl._service._repository._session
 
-                i_query = text("""
+                i_query = text(
+                    """
                     SELECT ika.initiative_id, ka.id, ka.name
                     FROM initiative_knowledge_areas ika
                     JOIN knowledge_areas ka ON ika.area_id = ka.id
-                """)
+                """
+                )
                 # Execute inside a transaction block or connection if needed, but session.execute should work
                 i_result = session.execute(i_query).fetchall()
                 for row in i_result:
@@ -179,9 +185,13 @@ class InitiativeAnalyticsMartGenerator:
                         initiative_kas_map[iid] = []
                     initiative_kas_map[iid].append({"id": row[1], "name": row[2]})
 
-                logger.info(f"Pre-fetched KAs for {len(initiative_kas_map)} initiatives.")
+                logger.info(
+                    f"Pre-fetched KAs for {len(initiative_kas_map)} initiatives."
+                )
             except Exception as e:
-                logger.warning(f"Failed to fetch Knowledge Area mappings for analytics: {e}")
+                logger.warning(
+                    f"Failed to fetch Knowledge Area mappings for analytics: {e}"
+                )
 
             # 2. Summary & Evolution
             total_projects = len(all_initiatives)
@@ -370,7 +380,9 @@ class InitiativeAnalyticsMartGenerator:
             # 5. Final Structure
             mart_data = {
                 "campus": (
-                    campus_stats.most_common(1)[0][0] if len(campus_stats) == 1 else None
+                    campus_stats.most_common(1)[0][0]
+                    if len(campus_stats) == 1
+                    else None
                 ),
                 "campuses": [
                     {"name": name, "count": count}

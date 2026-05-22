@@ -1,17 +1,14 @@
 import pytest
+
 from src.adapters.sources.lattes_parser import LattesParser
 
 
 @pytest.fixture
-
-
 def parser():
     return LattesParser()
 
 
 @pytest.fixture
-
-
 def sample_data():
     return {
         "projetos_pesquisa": [
@@ -19,8 +16,10 @@ def sample_data():
                 "nome": "Projeto Pesquisa 1",
                 "ano_inicio": "2020",
                 "ano_conclusao": "Atual",
-                "descricao": ["Descrição: Descricao do projeto. Situação: Em andamento; Natureza: Pesquisa."],
-                "integrantes": [{"nome": "Pesquisador A", "papel": "Coordenador"}]
+                "descricao": [
+                    "Descrição: Descricao do projeto. Situação: Em andamento; Natureza: Pesquisa."
+                ],
+                "integrantes": [{"nome": "Pesquisador A", "papel": "Coordenador"}],
             }
         ],
         "projetos_extensao": [
@@ -28,17 +27,21 @@ def sample_data():
                 "nome": "Projeto Extensao 1",
                 "ano_inicio": "2021",
                 "ano_conclusao": "2022",
-                "descricao": ["Descrição: Descricao extensao. Situação: Concluído; Natureza: Extensão."],
-                "integrantes": []
+                "descricao": [
+                    "Descrição: Descricao extensao. Situação: Concluído; Natureza: Extensão."
+                ],
+                "integrantes": [],
             }
         ],
         "projetos_desenvolvimento": [
-             {
+            {
                 "nome": "Projeto Dev 1",
                 "ano_inicio": "2019",
                 "ano_conclusao": "2019",
-                "descricao": ["Descrição: Descricao dev. Situação: Concluído; Natureza: Desenvolvimento."],
-                "integrantes": []
+                "descricao": [
+                    "Descrição: Descricao dev. Situação: Concluído; Natureza: Desenvolvimento."
+                ],
+                "integrantes": [],
             }
         ],
         "producao_bibliografica": {
@@ -50,7 +53,7 @@ def sample_data():
                     "revista": "Revista Cientifica",
                     "volume": "10",
                     "paginas": "1-10",
-                    "doi": "10.1234/artigo1"
+                    "doi": "10.1234/artigo1",
                 }
             ],
             "trabalhos_completos_congressos": [
@@ -59,10 +62,10 @@ def sample_data():
                     "ano": 2023,
                     "autores": "Autor C; Autor D",
                     "evento": "Congresso Internacional",
-                    "paginas": "100-110"
+                    "paginas": "100-110",
                 }
-            ]
-        }
+            ],
+        },
     }
 
 

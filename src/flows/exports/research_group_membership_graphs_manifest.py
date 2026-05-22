@@ -11,8 +11,12 @@ from src.notifications.telegram import telegram_flow_state_handlers
 @task(name="generate_research_group_membership_graphs_manifest_task")
 def generate_research_group_membership_graphs_manifest_task(output_dir: str):
     logger = get_run_logger()
-    output_path = os.path.join(output_dir, "research_group_membership_graphs_manifest.json")
-    logger.info("Generating Research Group Membership Graphs Manifest → %s", output_path)
+    output_path = os.path.join(
+        output_dir, "research_group_membership_graphs_manifest.json"
+    )
+    logger.info(
+        "Generating Research Group Membership Graphs Manifest → %s", output_path
+    )
 
     generator = ResearchGroupMembershipGraphsManifestGenerator()
     result = generator.generate(output_dir=output_dir, output_path=output_path)
@@ -30,7 +34,9 @@ def generate_research_group_membership_graphs_manifest_task(output_dir: str):
     name="Export Research Group Membership Graphs Manifest Flow",
     **telegram_flow_state_handlers(),
 )
-def export_research_group_membership_graphs_manifest_flow(output_dir: str = "data/exports"):
+def export_research_group_membership_graphs_manifest_flow(
+    output_dir: str = "data/exports",
+):
     if not os.path.isabs(output_dir):
         output_dir = os.path.join(os.getcwd(), output_dir)
 

@@ -6,7 +6,6 @@ from eo_lib import Initiative, InitiativeController, Person
 from eo_lib.domain import Role
 from loguru import logger
 
-
 # Workaround: Import directly from controllers module since not exported in __init__
 from research_domain.controllers.controllers import (
     AdvisorshipController,
@@ -29,7 +28,6 @@ class BaseInitiativeHandler(ABC):
         self.initiative_controller = initiative_controller
 
     @abstractmethod
-
     def create_or_update(
         self,
         project_data: Dict[str, Any],
@@ -391,7 +389,6 @@ class AdvisorshipHandler(BaseInitiativeHandler):
         return f"{name_key}::{sponsor_key}"
 
     @staticmethod
-
     def _clean_fellowship_sponsor_name(sponsor_name: Any) -> Optional[str]:
         if sponsor_name is None:
             return None
@@ -399,14 +396,12 @@ class AdvisorshipHandler(BaseInitiativeHandler):
         return cleaned or None
 
     @staticmethod
-
     def _normalize_fellowship_cache_part(value: Any) -> str:
         if value is None:
             return ""
         return str(value).strip().casefold()
 
     @staticmethod
-
     def _get_fellowship_value(fellowship: Any, key: str) -> Any:
         if isinstance(fellowship, dict):
             return fellowship.get(key)
@@ -616,7 +611,6 @@ class AdvisorshipHandler(BaseInitiativeHandler):
             initiative.fellowship_id = fellowship.id
 
     @staticmethod
-
     def _sync_advisorship_cancellation(
         initiative: Advisorship,
         project_data: Dict[str, Any],

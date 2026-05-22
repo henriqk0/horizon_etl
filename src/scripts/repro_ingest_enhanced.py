@@ -1,7 +1,7 @@
-import os
-import sys
+import os  # noqa E402
+import sys  # noqa E402
 
-from loguru import logger
+from loguru import logger  # noqa E402
 from sqlalchemy import text
 
 # Add project root to path

@@ -143,13 +143,16 @@ class SigPesqAdapter(ISource):
         Only apply the simplified launch on macOS.
         """
         import sys
+
         if sys.platform != "darwin":
             return
         try:
             from agent_sigpesq.core import browser_factory as _bf_mod
             from playwright.async_api import Playwright
 
-            async def _safe_create_browser_context(playwright: Playwright, headless: bool = True):
+            async def _safe_create_browser_context(
+                playwright: Playwright, headless: bool = True
+            ):
                 browser = await playwright.chromium.launch(headless=headless)
                 context = await browser.new_context(
                     viewport={"width": 1920, "height": 1080},
@@ -161,7 +164,9 @@ class SigPesqAdapter(ISource):
                 )
                 return context
 
-            _bf_mod.BrowserFactory.create_browser_context = staticmethod(_safe_create_browser_context)
+            _bf_mod.BrowserFactory.create_browser_context = staticmethod(
+                _safe_create_browser_context
+            )
         except Exception as exc:
             logger.warning(f"Could not patch BrowserFactory: {exc}")
 

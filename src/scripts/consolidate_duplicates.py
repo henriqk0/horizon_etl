@@ -1,8 +1,8 @@
-import argparse
-import json
-import os
-import sqlite3
-import sys
+import argparse  # noqa E402
+import json  # noqa E402
+import os  # noqa E402
+import sqlite3  # noqa E402
+import sys  # noqa E402
 
 sys.path.append(os.getcwd())
 
@@ -40,7 +40,9 @@ def _reference_plan(db_path: str) -> dict:
         )
     return {
         "team_duplicate_groups": len(team_groups),
-        "team_duplicate_records": sum(len(group["members"]) - 1 for group in team_groups),
+        "team_duplicate_records": sum(
+            len(group["members"]) - 1 for group in team_groups
+        ),
         "knowledge_area_duplicate_groups": len(knowledge_area_groups),
         "knowledge_area_duplicate_records": sum(
             len(group["members"]) - 1 for group in knowledge_area_groups

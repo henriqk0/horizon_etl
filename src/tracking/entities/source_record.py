@@ -1,8 +1,16 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String, UniqueConstraint
+from eo_lib.domain.base import Base
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from eo_lib.domain.base import Base
 
 
 class SourceRecord(Base):
@@ -33,7 +41,9 @@ class SourceRecord(Base):
     source_path = Column(String(1000), nullable=True)
     raw_payload_json = Column(JSON, nullable=True)
     payload_hash = Column(String(255), nullable=False)
-    extracted_at = Column(DateTime, nullable=False, server_default=func.now(), index=True)
+    extracted_at = Column(
+        DateTime, nullable=False, server_default=func.now(), index=True
+    )
 
     ingestion_run = relationship("IngestionRun", back_populates="source_records")
     entity_matches = relationship(

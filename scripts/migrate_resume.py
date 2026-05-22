@@ -1,5 +1,5 @@
-import sqlite3
 import os
+import sqlite3
 
 db_path = "db/horizon.db"
 if os.path.exists(db_path):

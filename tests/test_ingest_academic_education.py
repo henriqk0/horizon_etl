@@ -6,8 +6,6 @@ from src.flows.lattes.projects import ingest_file_task
 
 
 @pytest.fixture
-
-
 def mock_entity_manager():
     manager = MagicMock()
     # Mock ensure methods if needed, though mostly used for projects
@@ -19,24 +17,18 @@ def mock_entity_manager():
 
 
 @pytest.fixture
-
-
 def mock_researcher_controller():
     with patch("src.flows.lattes.projects.ResearcherController") as mock:
         yield mock
 
 
 @pytest.fixture
-
-
 def mock_education_controller():
     with patch("src.flows.lattes.projects.AcademicEducationController") as mock:
         yield mock
 
 
 @pytest.fixture
-
-
 def mock_lattes_parser():
     with patch("src.flows.lattes.projects.LattesParser") as mock:
         yield mock

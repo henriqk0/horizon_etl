@@ -37,20 +37,26 @@ class ResearchGroupMembershipGraphsManifestGenerator:
             scope = data.get("metadata", {}).get("scope", {}).get("research_group", {})
             stats = data.get("graph_stats", {})
 
-            entries.append({
-                "id": scope.get("id"),
-                "name": scope.get("name"),
-                "short_name": scope.get("short_name"),
-                "member_count": scope.get("member_count"),
-                "expanded_node_count": scope.get("expanded_node_count"),
-                "advisorship_neighbor_count": scope.get("advisorship_neighbor_count"),
-                "nodes": stats.get("nodes"),
-                "edges": stats.get("edges"),
-                "connected_components": stats.get("connected_components"),
-                "classification_distribution": stats.get("classification_distribution"),
-                "relation_event_totals": stats.get("relation_event_totals"),
-                "file": os.path.join(self.GRAPHS_DIR, filename),
-            })
+            entries.append(
+                {
+                    "id": scope.get("id"),
+                    "name": scope.get("name"),
+                    "short_name": scope.get("short_name"),
+                    "member_count": scope.get("member_count"),
+                    "expanded_node_count": scope.get("expanded_node_count"),
+                    "advisorship_neighbor_count": scope.get(
+                        "advisorship_neighbor_count"
+                    ),
+                    "nodes": stats.get("nodes"),
+                    "edges": stats.get("edges"),
+                    "connected_components": stats.get("connected_components"),
+                    "classification_distribution": stats.get(
+                        "classification_distribution"
+                    ),
+                    "relation_event_totals": stats.get("relation_event_totals"),
+                    "file": os.path.join(self.GRAPHS_DIR, filename),
+                }
+            )
 
         entries.sort(key=lambda e: (e["id"] is None, e["id"]))
 

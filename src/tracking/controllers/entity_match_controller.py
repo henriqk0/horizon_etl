@@ -9,7 +9,9 @@ from src.tracking.services import EntityMatchService
 
 class EntityMatchController(GenericController[EntityMatch]):
     def __init__(self, service: Optional[EntityMatchService] = None):
-        super().__init__(service or TrackingServiceFactory.create_entity_match_service())
+        super().__init__(
+            service or TrackingServiceFactory.create_entity_match_service()
+        )
 
     def create_match(
         self,

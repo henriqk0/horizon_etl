@@ -83,9 +83,7 @@ def test_sync_group_coerces_dict_description_before_update():
         group_id=87,
         cnpq_data={
             "nome_grupo": "Grupo Atual",
-            "repercussoes": {
-                "descricao": "Descricao normalizada do grupo"
-            },
+            "repercussoes": {"descricao": "Descricao normalizada do grupo"},
         },
     )
 
@@ -114,7 +112,9 @@ def test_sync_knowledge_areas_tracks_associations_after_commit(monkeypatch):
     tracker = MagicMock()
     tracker.record_source_record.return_value = SimpleNamespace(id=91)
     tracker.record_entity_match.side_effect = lambda **kwargs: events.append("match")
-    tracker.record_attribute_assertions.side_effect = lambda **kwargs: events.append("assert")
+    tracker.record_attribute_assertions.side_effect = lambda **kwargs: events.append(
+        "assert"
+    )
     tracker.record_change.side_effect = lambda **kwargs: events.append("change")
     monkeypatch.setattr(cnpq_sync_module, "tracking_recorder", tracker)
 

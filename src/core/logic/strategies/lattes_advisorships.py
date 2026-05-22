@@ -1,9 +1,11 @@
-from typing import Any, Dict
 from datetime import datetime
+from typing import Any, Dict
+
+from research_domain.domain.entities import Advisorship
+
+from src.core.logic.initiative_identity import build_identity_key
 
 from .base import ProjectMappingStrategy
-from research_domain.domain.entities import Advisorship
-from src.core.logic.initiative_identity import build_identity_key
 
 
 class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
@@ -58,17 +60,23 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
 
         if sponsor_name or fellowship_name:
             # Clean up default empty strings
-            f_name = fellowship_name if fellowship_name else f"Bolsa - {row.get('type_name', 'Unknown')}"
+            f_name = (
+                fellowship_name
+                if fellowship_name
+                else f"Bolsa - {row.get('type_name', 'Unknown')}"
+            )
             fellowship_data = {
                 "name": f_name,
                 "sponsor_name": sponsor_name,
                 "value": 0.0,
-                "description": row.get("type_name")
+                "description": row.get("type_name"),
             }
 
         return {
             "title": row.get("title") or "Untitled Advisorship",
-            "status": row.get("status"),  # Lattes parser standardizes to Active/Concluded
+            "status": row.get(
+                "status"
+            ),  # Lattes parser standardizes to Active/Concluded
             "start_date": start_date,
             "end_date": end_date,
             "description": row.get("type_name", ""),

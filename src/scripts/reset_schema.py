@@ -1,15 +1,19 @@
+import os  # noqa E402
+import sys  # noqa E402
 
-import sys
-import os
-from sqlalchemy import text
-from loguru import logger
+from loguru import logger  # noqa E402
+from sqlalchemy import text  # noqa E402
 
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from eo_lib.infrastructure.database.postgres_client import PostgresClient
 from eo_lib.domain.base import Base
-from research_domain.domain.entities.academic_education import AcademicEducation, EducationType
+from eo_lib.infrastructure.database.postgres_client import PostgresClient
+
+# from research_domain.domain.entities.academic_education import (
+#    AcademicEducation,
+#    EducationType,
+# )
 
 
 def reset_schema():
@@ -55,6 +59,7 @@ def reset_schema():
         logger.info("SUCCESS: Schema updated.")
     else:
         logger.error("FAILURE: Schema still old.")
+
 
 if __name__ == "__main__":
     reset_schema()

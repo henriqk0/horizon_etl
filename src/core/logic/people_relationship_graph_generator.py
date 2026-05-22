@@ -9,7 +9,6 @@ import networkx as nx
 from loguru import logger
 from networkx.readwrite import json_graph
 
-
 RELATION_DESCRIPTIONS = {
     "initiative": "People who appear together in the same initiative team.",
     "research_group": "People who belong to the same research group.",
@@ -96,7 +95,9 @@ class PeopleRelationshipGraphGenerator:
             self._write_json(output_path, result)
             classification_exports.append(
                 {
-                    "classification": "null" if classification is None else classification,
+                    "classification": (
+                        "null" if classification is None else classification
+                    ),
                     "path": output_path,
                     "nodes": result["graph_stats"]["nodes"],
                     "edges": result["graph_stats"]["edges"],
@@ -110,7 +111,9 @@ class PeopleRelationshipGraphGenerator:
             output_dir=output_dir,
         )
 
-        membership_alias = os.path.join(output_dir, RESEARCH_GROUP_MEMBERSHIP_GRAPH_DIRECTORY)
+        membership_alias = os.path.join(
+            output_dir, RESEARCH_GROUP_MEMBERSHIP_GRAPH_DIRECTORY
+        )
         if os.path.islink(membership_alias):
             os.unlink(membership_alias)
         if not os.path.exists(membership_alias):
@@ -356,9 +359,7 @@ class PeopleRelationshipGraphGenerator:
                 person_id,
                 name=researcher.get("name"),
                 classification=researcher.get("classification"),
-                classification_confidence=researcher.get(
-                    "classification_confidence"
-                ),
+                classification_confidence=researcher.get("classification_confidence"),
                 was_student=bool(researcher.get("was_student")),
                 was_staff=bool(researcher.get("was_staff")),
                 campus_name=self._extract_campus_name(researcher.get("campus")),
@@ -504,9 +505,7 @@ class PeopleRelationshipGraphGenerator:
         }
 
     def _sum_relation_event_totals(self, graph: nx.Graph) -> dict[str, int]:
-        totals = {
-            relation_type: 0 for relation_type in RELATION_DESCRIPTIONS
-        }
+        totals = {relation_type: 0 for relation_type in RELATION_DESCRIPTIONS}
         for _source_id, _target_id, attrs in graph.edges(data=True):
             for relation_type in RELATION_DESCRIPTIONS:
                 totals[relation_type] += int(attrs.get(f"{relation_type}_count", 0))

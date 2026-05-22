@@ -61,7 +61,6 @@ class SigPesqMapper:
     """
 
     @staticmethod
-
     def map_project(raw_data: Dict[str, Any]) -> Project:
         """
         Maps a raw dictionary from SigPesq to a Project entity.
@@ -93,7 +92,6 @@ class SigPesqMapper:
             raise e
 
     @staticmethod
-
     def map_research_group(raw_data: Dict[str, Any]) -> ResearchGroup:
         try:
             name = raw_data.get("nome_grupo", "Unnamed Group").strip()
@@ -111,7 +109,6 @@ class SigPesqMapper:
             raise e
 
     @staticmethod
-
     def map_researcher(raw_data: Dict[str, Any]) -> Researcher:
         try:
             name = raw_data.get("nome", "Unknown").strip()

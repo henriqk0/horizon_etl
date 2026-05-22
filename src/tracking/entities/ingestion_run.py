@@ -1,8 +1,7 @@
+from eo_lib.domain.base import Base
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from eo_lib.domain.base import Base
 
 
 class IngestionRun(Base):

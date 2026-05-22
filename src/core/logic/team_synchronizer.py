@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from eo_lib import TeamController
 from loguru import logger
+
 from src.core.logic.initiative_identity import normalize_text
 
 
@@ -184,7 +185,9 @@ class TeamSynchronizer:
                         if m_id:
                             self.team_controller.remove_member(m_id)
                         else:
-                            logger.warning(f"Could not find member ID for obsolete membership (Person {m_person_id})")
+                            logger.warning(
+                                f"Could not find member ID for obsolete membership (Person {m_person_id})"
+                            )
                     except Exception as e:
                         logger.warning(f"Failed to remove obsolete member: {e}")
         except Exception as e:

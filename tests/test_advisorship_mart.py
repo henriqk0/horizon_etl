@@ -18,15 +18,15 @@ def test_generate_advisorship_mart_calculates_correctly():
                 {
                     "status": "Active",
                     "supervisor_name": "Dr. Silva",
-                    "fellowship": {"name": "PIBITI", "value": 700.0}
+                    "fellowship": {"name": "PIBITI", "value": 700.0},
                 },
                 {
                     "status": "Concluded",
                     "supervisor_name": "Dr. Santos",
-                    "fellowship": {"name": "Voluntário", "value": 0.0}
-                }
+                    "fellowship": {"name": "Voluntário", "value": 0.0},
+                },
             ],
-            "team": [{"name": "Member 1"}, {"name": "Member 2"}]
+            "team": [{"name": "Member 1"}, {"name": "Member 2"}],
         },
         {
             "id": 2,
@@ -35,11 +35,11 @@ def test_generate_advisorship_mart_calculates_correctly():
                 {
                     "status": "Active",
                     "supervisor_name": "Dr. Silva",
-                    "fellowship": {"name": "PIBITI", "value": 700.0}
+                    "fellowship": {"name": "PIBITI", "value": 700.0},
                 }
             ],
-            "team": [{"name": "Member 3"}]
-        }
+            "team": [{"name": "Member 3"}],
+        },
     ]
 
     json_input = json.dumps(sample_data)

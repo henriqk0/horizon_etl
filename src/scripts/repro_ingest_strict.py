@@ -1,8 +1,8 @@
-import os
-import sys
+import os  # noqa E402
+import sys  # noqa E402
 
-from loguru import logger
-from sqlalchemy import text
+from loguru import logger  # noqa E402
+from sqlalchemy import text  # noqa E402
 
 sys.path.append(os.getcwd())
 
