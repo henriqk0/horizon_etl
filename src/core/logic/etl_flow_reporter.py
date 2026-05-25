@@ -375,7 +375,7 @@ def probe_cnpq_sync(campus_name: Optional[str] = None) -> dict[str, Any]:
         conn.row_factory = sqlite3.Row
         if campus_name:
             campus = conn.execute(
-                "SELECT id, name FROM campuses WHERE lower(name) LIKE lower(?) LIMIT 1",
+                "SELECT id, name FROM organizational_units WHERE lower(name) LIKE lower(?) LIMIT 1",
                 (f"%{campus_name}%",),
             ).fetchone()
             if not campus:

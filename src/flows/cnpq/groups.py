@@ -187,23 +187,41 @@ def build_cnpq_sync_summary(results: list[dict]) -> dict:
     }
 
 
+def chunks(lst: list, n: int):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
+@task
+def sync_groups_chunk(groups_chunk: list[dict]):
+    """Sync a chunk of groups and return results."""
+    futures = sync_single_group.map(groups_chunk)
+    return [f.result() for f in futures]
+
+
 @flow(name="Sync CNPq Research Groups", **telegram_flow_state_handlers())
-def sync_cnpq_groups_flow(campus_name: Optional[str] = None):
+def sync_cnpq_groups_flow(campus_name: Optional[str] = None, max_concurrency: int = 10):
     """
     Prefect flow to synchronize research groups with CNPq DGP mirror.
+
+    Args:
+        campus_name: Optional campus name to filter groups.
+        max_concurrency: Maximum number of groups to sync in parallel (default: 10).
     """
     logger = get_run_logger()
-    logger.info(f"Starting CNPq Synchronization Flow (Filter: {campus_name or 'None'})")
+    logger.info(f"Starting CNPq Synchronization Flow (Filter: {campus_name or 'None'}, max_concurrency={max_concurrency})")
 
     groups = get_groups_to_sync(campus_name=campus_name)
 
-    results = []
-    for g_info in groups:
-        res = sync_single_group(g_info)
-        results.append(res)
+    # Process in chunks to limit DB concurrency
+    all_results = []
+    for chunk in chunks(groups, max_concurrency):
+        chunk_results = sync_groups_chunk(chunk)
+        all_results.extend(chunk_results)
 
-    success_count = sum(1 for r in results if r.get("success"))
-    summary = build_cnpq_sync_summary(results)
+    success_count = sum(1 for r in all_results if r.get("success"))
+    summary = build_cnpq_sync_summary(all_results)
     logger.info(
         f"Flow finished. Successfully synchronized {success_count}/{len(groups)} groups."
     )
