@@ -195,9 +195,12 @@ def chunks(lst: list, n: int):
 
 @task
 def sync_groups_chunk(groups_chunk: list[dict]):
-    """Sync a chunk of groups and return results."""
-    futures = sync_single_group.map(groups_chunk)
-    return [f.result() for f in futures]
+    """Sync a chunk of groups sequentially to avoid SQLite lock conflicts."""
+    results = []
+    for group in groups_chunk:
+        result = sync_single_group(group)
+        results.append(result)
+    return results
 
 
 @flow(name="Sync CNPq Research Groups", **telegram_flow_state_handlers())

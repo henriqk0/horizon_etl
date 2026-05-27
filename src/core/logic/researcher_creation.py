@@ -1,6 +1,6 @@
 """Helpers for creating researchers across inconsistent library versions."""
 
-from typing import Optional
+from typing import Any, Optional
 
 from loguru import logger
 from sqlalchemy import text
@@ -34,6 +34,36 @@ def create_researcher_with_resume_fallback(
             emails=emails,
             identification_id=identification_id,
         )
+    except Exception as exc:
+        # Handle UNIQUE constraint conflict (e.g., from concurrent Prefect tasks)
+        if _is_unique_constraint_error(exc):
+            logger.debug(
+                f"Researcher '{name}' (ID: {identification_id}) already exists due to concurrent insert. Fetching existing."
+            )
+            _rollback_session(researcher_ctrl)
+            existing = _find_researcher_by_identification_id(researcher_ctrl, identification_id)
+            if existing:
+                return existing
+            # If fetch fails, re-raise
+            raise
+        # Handle PersonEmail type mismatch - try without emails
+        if _is_person_email_type_mismatch(exc) and emails:
+            logger.debug(
+                f"Falling back to researcher creation without relationship-bound emails for '{name}'."
+            )
+            _rollback_session(researcher_ctrl)
+            researcher = researcher_ctrl.create_researcher(
+                name=name,
+                emails=None,
+                identification_id=identification_id,
+            )
+            _ensure_researcher_row(researcher_ctrl, researcher.id)
+            _ensure_person_emails(researcher_ctrl, researcher.id, emails)
+            try:
+                return researcher_ctrl.get_by_id(researcher.id)
+            except Exception:
+                return researcher
+        raise
     except TypeError as exc:
         if "resume" not in str(exc):
             raise
@@ -47,27 +77,6 @@ def create_researcher_with_resume_fallback(
             identification_id=identification_id,
         )
         _ensure_researcher_row(researcher_ctrl, researcher.id)
-
-        try:
-            return researcher_ctrl.get_by_id(researcher.id)
-        except Exception:
-            return researcher
-    except Exception as exc:
-        if not _is_person_email_type_mismatch(exc) or not emails:
-            raise
-
-        logger.debug(
-            f"Falling back to researcher creation without relationship-bound emails for '{name}'."
-        )
-        _rollback_session(researcher_ctrl)
-
-        researcher = researcher_ctrl.create_researcher(
-            name=name,
-            emails=None,
-            identification_id=identification_id,
-        )
-        _ensure_researcher_row(researcher_ctrl, researcher.id)
-        _ensure_person_emails(researcher_ctrl, researcher.id, emails)
 
         try:
             return researcher_ctrl.get_by_id(researcher.id)
@@ -154,3 +163,27 @@ def _rollback_session(researcher_ctrl) -> None:
 def _is_person_email_type_mismatch(exc: Exception) -> bool:
     message = str(exc)
     return "PersonEmail.person" in message and "Expected an object of type" in message
+
+
+def _is_unique_constraint_error(exc: Exception) -> bool:
+    """Check if exception is a UNIQUE constraint violation."""
+    message = str(exc).lower()
+    return (
+        "unique" in message or
+        "duplicate" in message or
+        "constraint" in message and "failed" in message
+    )
+
+
+def _find_researcher_by_identification_id(researcher_ctrl, identification_id: Optional[str]) -> Optional[Any]:
+    """Find an existing researcher by identification_id."""
+    if not identification_id:
+        return None
+    try:
+        all_researchers = researcher_ctrl.get_all()
+        for r in all_researchers:
+            if getattr(r, "identification_id", None) == identification_id:
+                return r
+    except Exception:
+        pass
+    return None

@@ -134,8 +134,11 @@ class AdvisorshipHandler(BaseInitiativeHandler):
                     fellowship_data = {"name": name}
                     sponsor_name = self._get_fellowship_sponsor_name(f)
                     sponsor_id = self._get_fellowship_value(f, "sponsor_id")
+                    value = self._get_fellowship_value(f, "value")
                     if sponsor_name:
                         fellowship_data["sponsor_name"] = sponsor_name
+                    if value is not None:
+                        fellowship_data["value"] = float(value)
                     self._cache_fellowship(
                         f,
                         fellowship_data,
@@ -393,7 +396,11 @@ class AdvisorshipHandler(BaseInitiativeHandler):
             sponsor_key = self._normalize_fellowship_cache_part(
                 fellowship_data.get("sponsor_name")
             )
-        return f"{name_key}::{sponsor_key}"
+        # Include value in key to distinguish "PIBIC@Fapes@400" from "PIBIC@Fapes@800"
+        value_key = fellowship_data.get("value", 0.0)
+        if isinstance(value_key, str):
+            value_key = float(value_key.replace(",", "."))
+        return f"{name_key}::{sponsor_key}::{value_key}"
 
     @staticmethod
     def _clean_fellowship_sponsor_name(sponsor_name: Any) -> Optional[str]:
