@@ -353,6 +353,17 @@ class AdvisorshipHandler(BaseInitiativeHandler):
                         sponsor_id=sponsor_id,
                     )
 
+            # Update fellowship value if incoming value is non-zero and different
+            incoming_value = fellowship_data.get("value", 0.0)
+            if incoming_value and incoming_value != fellowship.value:
+                fellowship.value = incoming_value
+                self.fel_controller.update(fellowship)
+                self._cache_fellowship(
+                    fellowship,
+                    fellowship_data,
+                    sponsor_id=sponsor_id,
+                )
+
         return fellowship
 
     def _cache_fellowship(
