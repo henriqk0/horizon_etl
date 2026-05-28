@@ -73,11 +73,16 @@ class SigPesqAdapter(ISource):
         """
         os.makedirs(self.download_dir, exist_ok=True)
         for entry in os.scandir(self.download_dir):
-            if entry.is_dir(follow_symlinks=False):
-                shutil.rmtree(entry.path)
-            else:
-                os.remove(entry.path)
-        logger.info(f"Cleaned SigPesq download directory: {self.download_dir}")
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    shutil.rmtree(entry.path)
+                else:
+                    os.remove(entry.path)
+            except OSError:
+                logger.warning(
+                    "Could not remove stale entry '{}' — continuing (will be overwritten on download).",
+                    entry.path,
+                )
 
     def _trigger_download(self, download_strategies: list = None):
         """

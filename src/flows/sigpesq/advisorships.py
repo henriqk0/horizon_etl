@@ -35,8 +35,9 @@ def persist_advisorships():
         logger.warning("No Advisorship Excel files found.")
         return
 
-    # Sort by mtime (optional, but good for logs)
-    files.sort(key=os.path.getmtime)
+    # Sort by year directory in descending order (newest first)
+    # so the most recent year's values take precedence for shared fellowships.
+    files.sort(key=lambda f: os.path.basename(os.path.dirname(f)), reverse=True)
 
     loader = ProjectLoader(mapping_strategy=SigPesqAdvisorshipMappingStrategy())
 
