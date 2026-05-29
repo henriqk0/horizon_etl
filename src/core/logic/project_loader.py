@@ -551,15 +551,17 @@ class ProjectLoader:
         if current is None or self._candidate_matches_model(current, model_class):
             existing_by_name[title] = initiative
 
+    REJECTED_STATUSES = {"recusado", "reprovado", "negado", "cancelado"}
+
     def _is_approved(self, row_dict: Dict[str, Any]) -> bool:
         parecer = row_dict.get("ParecerDiretoria", "Aprovado")
         if (
             isinstance(parecer, str)
             and parecer.strip()
-            and "aprovado" not in parecer.lower()
+            and parecer.strip().lower() in self.REJECTED_STATUSES
         ):
             logger.info(
-                f"Skipping project '{row_dict.get('Título', 'Unknown')}' - Not Approved"
+                f"Skipping project '{row_dict.get('Título', 'Unknown')}' - {parecer}"
             )
             return False
         return True
