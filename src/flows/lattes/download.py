@@ -34,9 +34,11 @@ def clean_lattes_json_output(output_dir: str) -> int:
 
     removed_count = 0
     for json_file in output_path.glob("*.json"):
-        json_file.unlink()
-        removed_count += 1
-
+        try:
+            json_file.unlink()
+            removed_count += 1
+        except PermissionError:
+            logger.warning(f"Could not remove stale JSON file: {json_file}")
     return removed_count
 
 
@@ -301,7 +303,7 @@ def get_researchers_from_db() -> List[Dict]:
 @task
 def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
     config_gen = LattesConfigGenerator()
-    config_path = os.path.abspath("lattes.config")
+    config_path = os.path.abspath("cache/lattes.config")
     config_gen.generate(config_path, output_dir, list_path, cache_dir=cache_dir)
     return config_path
 
@@ -309,7 +311,7 @@ def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
 @task
 def generate_list(researchers: List[Dict]) -> str:
     list_gen = LattesListGenerator()
-    list_path = os.path.abspath("lattes.list")
+    list_path = os.path.abspath("cache/lattes.list")
     list_gen.generate_from_db(list_path, researchers)
     return list_path
 
@@ -338,7 +340,7 @@ def download_lattes_flow():
     output_dir = os.path.join(base_dir, "lattes_json")
     cache_dir = os.path.abspath("cache")
 
-    override_list_path = os.path.abspath("data/lattes_run/lattes.list")
+    override_list_path = os.path.abspath("cache/lattes.list")
 
     if os.path.exists(override_list_path):
         logger.info(f"Using override list file: {override_list_path}")
@@ -372,7 +374,7 @@ def download_lattes_flow():
         cache_path = Path(cache_dir)
         failed_ids = {lid for lid in lattes_ids if not (cache_path / lid).exists()}
         if failed_ids:
-            tmp_list = os.path.abspath("lattes_effective.list")
+            tmp_list = os.path.abspath("cache/lattes_effective.list")
             with open(tmp_list, "w") as f:
                 for line in Path(list_path).read_text().splitlines():
                     match = LATTES_ID_RE.search(line)

@@ -41,7 +41,6 @@ services:
       context: .
       dockerfile: Dockerfile
     image: horizon-etl:latest
-    user: "${UID:-1000}:${GID:-1000}"
     env_file: .env
     environment:
       PREFECT_API_URL: http://server:4200/api
@@ -49,6 +48,8 @@ services:
       CHROME_BINARY: /usr/bin/chromium
       CHROMEDRIVER_PATH: /usr/bin/chromedriver
       STORAGE_TYPE: db
+      USER_UID: ${UID:-1000}
+      USER_GID: ${GID:-1000}
     volumes:
       - ./db:/app/db
       - ./data/exports:/app/data/exports

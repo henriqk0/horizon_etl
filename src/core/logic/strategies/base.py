@@ -111,10 +111,31 @@ class ProjectMappingStrategy(ABC):
 
     @staticmethod
     def parse_currency(value_str: Any) -> float:
-        """Converts Portuguese currency strings (comma-to-dot) to float."""
-        if not value_str or (hasattr(value_str, "isna") and value_str.isna()):
+        """Converts Portuguese currency strings to float.
+
+        Handles formats:
+          "1.500,00" -> 1500.0  (Brazilian thousand/decimal separators)
+          "R$ 400,00" -> 400.0  (with currency prefix)
+          "400,00"    -> 400.0  (comma as decimal)
+          400.0       -> 400.0  (raw numeric)
+        """
+        if value_str is None:
+            return 0.0
+        if isinstance(value_str, (int, float)):
+            return float(value_str)
+        if hasattr(value_str, "isna") and value_str.isna():
+            return 0.0
+        s = str(value_str).strip().replace("R$", "").strip()
+        if not s:
             return 0.0
         try:
-            return float(str(value_str).replace(",", "."))
+            if "," in s and "." in s:
+                if s.rfind(",") > s.rfind("."):
+                    s = s.replace(".", "").replace(",", ".")
+                else:
+                    s = s.replace(",", "")
+            elif "," in s:
+                s = s.replace(",", ".")
+            return float(s)
         except (ValueError, TypeError):
             return 0.0

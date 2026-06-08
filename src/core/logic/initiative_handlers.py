@@ -380,13 +380,14 @@ class AdvisorshipHandler(BaseInitiativeHandler):
         sponsor_id: Optional[int] = None,
     ) -> str:
         name_key = self._normalize_fellowship_cache_part(fellowship_data["name"])
+        value_key = fellowship_data.get("value", 0.0)
         if sponsor_id is not None:
             sponsor_key = f"id:{sponsor_id}"
         else:
             sponsor_key = self._normalize_fellowship_cache_part(
                 fellowship_data.get("sponsor_name")
             )
-        return f"{name_key}::{sponsor_key}"
+        return f"{name_key}::{value_key}::{sponsor_key}"
 
     @staticmethod
     def _clean_fellowship_sponsor_name(sponsor_name: Any) -> Optional[str]:

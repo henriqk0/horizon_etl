@@ -239,7 +239,7 @@ docker-weekly-flows: docker-up ## Run weekly flows in Docker
 docker-db-reset: ## Reset the ETL database inside Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app db/create_db.py
 
-docker-full-refresh: docker-db-reset docker-up ## Reset DB and run all sources in Docker
+docker-full-refresh: docker-up docker-db-reset ## Reset DB and run all sources in Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app
 
 docker-ingest-sigpesq: docker-up ## Ingest SigPesq in Docker

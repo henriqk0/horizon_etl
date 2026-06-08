@@ -28,6 +28,12 @@ class InitiativeLinker:
         self.team_synchronizer = team_synchronizer
         self.entity_manager = entity_manager
 
+    def _rollback_session(self):
+        try:
+            self.initiative_controller._service._repository._session.rollback()
+        except Exception:
+            pass
+
     def create_initiative_team(
         self, initiative: Any, project_data: Dict[str, Any]
     ) -> None:
@@ -83,6 +89,7 @@ class InitiativeLinker:
             self.initiative_controller.assign_team(initiative.id, team.id)
         except Exception as e:
             logger.warning(f"Failed to assign team to initiative: {e}")
+            self._rollback_session()
 
     def add_members_to_initiative_team(
         self, initiative: Any, project_data: Dict[str, Any]
@@ -130,6 +137,7 @@ class InitiativeLinker:
             self.initiative_controller.assign_team(initiative.id, team.id)
         except Exception as e:
             logger.warning(f"Failed to assign team to parent initiative: {e}")
+            self._rollback_session()
 
     def link_research_group(
         self,
