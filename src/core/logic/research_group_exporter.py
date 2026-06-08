@@ -4,6 +4,7 @@ from eo_lib.controllers.organization_controller import OrganizationController
 from loguru import logger
 from research_domain import CampusController, ResearchGroupController
 
+from src.core.logic.pii_anonymizer import anonymize_email, is_anonymized_email
 from src.core.ports.export_sink import IExportSink
 
 
@@ -123,7 +124,10 @@ class ResearchGroupExporter:
                             and hasattr(tm.person, "emails")
                             and tm.person.emails
                         ):
-                            email_list = [e.email for e in tm.person.emails]
+                            email_list = [
+                                anonymize_email(e.email) if not is_anonymized_email(e.email) else e.email
+                                for e in tm.person.emails
+                            ]
 
                         role_name = tm.role.name if tm.role else "Member"
 
