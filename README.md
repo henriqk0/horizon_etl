@@ -228,9 +228,56 @@ Artefatos locais relevantes:
 
 - `db/horizon.db`: banco SQLite local gerado pela execucao.
 - `data/raw/`: arquivos brutos baixados das fontes.
-- `data/exports/`: exports canonicos e marts.
+- `data/exports/`: arquivo ZIP unico por execucao (`canonical_export_<YYYYMMDD_HHMMSS>.zip`) contendo todos os JSONs canonicos, grafos e marts.
 - `data/reports/`: relatorios de auditoria e conciliacao.
 - `logs/`: logs locais de pipeline.
+
+### Estrutura do ZIP de export canonico
+
+Cada execucao de `make export-canonical` produz um unico arquivo
+`data/exports/canonical_export_<YYYYMMDD_HHMMSS>.zip` com o seguinte conteudo:
+
+```text
+canonical_export_<timestamp>.zip
+|-- organizations_canonical.json          (26 organizacoes)
+|-- campuses_canonical.json              (23 campi)
+|-- knowledge_areas_canonical.json       (1543 areas)
+|-- researchers_canonical.json           (7603 pesquisadores + participantes)
+|-- researchers_only_canonical.json      (2452 pesquisadores stricto sensu)
+|-- students_canonical.json              (4829 alunos)
+|-- outside_ifes_canonical.json          (298 externos)
+|-- null_researchers_canonical.json      (24 sem classificacao)
+|-- researchers_tracking.json            (6472 registros de acompanhamento)
+|-- research_groups_canonical.json       (342 grupos)
+|-- initiatives_canonical.json           (1429 iniciativas)
+|-- initiatives_tracking.json            (255 registros)
+|-- initiative_types_canonical.json      (2 tipos)
+|-- articles_canonical.json              (720 artigos)
+|-- advisorships_canonical.json          (173 projetos-pai com orientacoes)
+|-- advisorships_tracking.json           (1046 registros)
+|-- fellowships_canonical.json           (35 programas de bolsa)
+|-- advisorship_analytics.json           (1 mart analitico)
+|-- ingestion_runs_canonical.json        (9 execucoes)
+|-- source_records_canonical.json        (13586 registros-fonte)
+|-- entity_matches_canonical.json        (13431 matches)
+|-- attribute_assertions_canonical.json  (58293 atribuicoes)
+|-- entity_change_logs_canonical.json    (14521 changelogs)
+|-- people_relationship_graph.json       (grafo relacional completo)
+|-- people_collaboration_graph.json      (7603 nos, 5232 arestas)
+|-- researchers_only_collaboration_graph.json
+|-- students_collaboration_graph.json
+|-- outside_ifes_collaboration_graph.json
+|-- null_researchers_collaboration_graph.json
+|-- research_group_membership_graphs_manifest.json   (342 grupos, 9736 nos)
+|-- research_group_relationship_graphs_manifest.json (342 grupos)
+|-- research_group_relationship_graphs/              (342 grafos relacionais)
+    |-- research_group_1_relationship_graph.json
+    |-- ...
+    |-- research_group_342_relationship_graph.json
+```
+
+Os numeros entre parenteses refletem uma execucao tipica e podem variar conforme
+a fonte e o filtro de campus aplicado.
 
 Arquivos gerados nao devem ser tratados como fonte de verdade do codigo. A
 fonte de verdade e formada pelos flows, strategies, loaders e entidades de
