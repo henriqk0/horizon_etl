@@ -479,9 +479,50 @@ class ProjectLoader:
         if title:
             candidate = existing_by_name.get(title)
             if self._candidate_matches_model(candidate, model_class):
-                return candidate
+                if not self._has_conflicting_identity(candidate, identity_key):
+                    return candidate
 
-        return self._lookup_existing_by_exact_name(title, model_class)
+        result = self._lookup_existing_by_exact_name(title, model_class)
+        if result is not None and self._has_conflicting_identity(result, identity_key):
+            return None
+        return result
+
+    def _has_conflicting_identity(
+        self, candidate: Optional[Any], new_identity_key: Optional[str]
+    ) -> bool:
+        """
+        Check if a candidate initiative already has an identity from the same source
+        but with a different value than the new identity_key.
+
+        Prevents name-based fallback from merging records that belong to different
+        workplans (e.g., same advisorship title but different CodPT / different student).
+        """
+        if not new_identity_key or candidate is None:
+            return False
+
+        existing_identity = get_existing_initiative_identity(candidate)
+        if not existing_identity:
+            return False
+
+        new_prefix = (
+            new_identity_key.split("|")[0]
+            if "|" in new_identity_key
+            else new_identity_key
+        )
+        existing_prefix = (
+            existing_identity.split("|")[0]
+            if "|" in existing_identity
+            else existing_identity
+        )
+
+        if (
+            new_prefix
+            and new_prefix == existing_prefix
+            and new_identity_key != existing_identity
+        ):
+            return True
+
+        return False
 
     def _candidate_matches_model(self, candidate: Optional[Any], model_class) -> bool:
         if candidate is None:
