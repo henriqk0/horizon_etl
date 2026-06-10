@@ -15,6 +15,12 @@ from research_domain import (
 from sqlalchemy import text
 
 from src.core.logic.export_campus_resolver import ExportCampusResolver
+from src.core.logic.pii_anonymizer import (
+    anonymize_person_data,
+    is_anonymized_cpf,
+    scrub_pii_deep,
+    scrub_source_record_phones,
+)
 from src.core.ports.export_sink import IExportSink
 from src.research_domain_compat import AdvisorshipRole
 from src.tracking.entities import (
@@ -940,6 +946,11 @@ class CanonicalDataExporter:
         for row in rows:
             item = dict(row)
             item.setdefault("campus", self._resolve_record_campus(item, entity_type))
+            item = scrub_pii_deep(item)
+            if entity_type == "source_record":
+                payload = item.get("raw_payload_json")
+                if isinstance(payload, dict):
+                    item["raw_payload_json"] = scrub_source_record_phones(payload)
             enriched.append(item)
         return enriched
 
@@ -1575,6 +1586,8 @@ class CanonicalDataExporter:
             )
             r_dict["campus"] = resolver.get_campus("researcher", p_id_int or p_id)
 
+            if r_dict.get("identification_id") and not is_anonymized_cpf(r_dict["identification_id"]):
+                r_dict = anonymize_person_data(r_dict)
             export_data.append(r_dict)
 
         logger.info(

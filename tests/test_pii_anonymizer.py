@@ -8,6 +8,9 @@ from src.core.logic.pii_anonymizer import (
     anonymize_person_data,
     is_anonymized_cpf,
     is_anonymized_email,
+    scrub_emails_from_text,
+    scrub_pii_deep,
+    scrub_source_record_phones,
 )
 
 SALT = b":horizon-lgpd-v1"
@@ -192,3 +195,109 @@ def test_anonymize_person_data_already_anonymized_cpf_still_hashes_again():
     anon = anonymize_cpf("12345678901")
     result = anonymize_person_data({"identification_id": anon})
     assert result["identification_id"].startswith("LGPD-")
+
+
+# --- scrub_emails_from_text ---
+
+def test_scrub_emails_from_text_replaces_email():
+    result = scrub_emails_from_text("Contact: user@example.com for details.")
+    assert "user@example.com" not in result
+    assert "@anon.lgpd" in result
+
+
+def test_scrub_emails_from_text_replaces_multiple_emails():
+    text = "a@b.com and c@d.com"
+    result = scrub_emails_from_text(text)
+    assert "a@b.com" not in result
+    assert "c@d.com" not in result
+    assert result.count("@anon.lgpd") == 2
+
+
+def test_scrub_emails_from_text_preserves_anon_lgpd():
+    text = "already abc123456789@anon.lgpd done"
+    assert scrub_emails_from_text(text) == text
+
+
+def test_scrub_emails_from_text_no_email_unchanged():
+    text = "nothing to scrub here"
+    assert scrub_emails_from_text(text) == text
+
+
+def test_scrub_emails_from_text_none_returns_none():
+    assert scrub_emails_from_text(None) is None
+
+
+def test_scrub_emails_from_text_lideres_pattern():
+    text = " Carlos Campos (carlosr@ifes.edu.br), Maria Alice (mariaalice@ifes.edu.br)"
+    result = scrub_emails_from_text(text)
+    assert "carlosr@ifes.edu.br" not in result
+    assert "mariaalice@ifes.edu.br" not in result
+    assert "Carlos Campos" in result
+    assert "Maria Alice" in result
+
+
+# --- scrub_pii_deep ---
+
+def test_scrub_pii_deep_string():
+    result = scrub_pii_deep("email: foo@bar.com")
+    assert "foo@bar.com" not in result
+    assert "@anon.lgpd" in result
+
+
+def test_scrub_pii_deep_dict():
+    data = {"OrientadorEmail": "prof@ifes.edu.br", "name": "João"}
+    result = scrub_pii_deep(data)
+    assert "prof@ifes.edu.br" not in result["OrientadorEmail"]
+    assert result["OrientadorEmail"].endswith("@anon.lgpd")
+    assert result["name"] == "João"
+
+
+def test_scrub_pii_deep_nested_dict():
+    data = {"changes": [{"after": '{"resume": "bio text user@x.com end"}'}]}
+    result = scrub_pii_deep(data)
+    assert "user@x.com" not in result["changes"][0]["after"]
+    assert "@anon.lgpd" in result["changes"][0]["after"]
+
+
+def test_scrub_pii_deep_list():
+    data = ["a@b.com", "no email", "c@d.com"]
+    result = scrub_pii_deep(data)
+    assert all("@anon.lgpd" in r or r == "no email" for r in result)
+
+
+def test_scrub_pii_deep_non_string_passthrough():
+    assert scrub_pii_deep(42) == 42
+    assert scrub_pii_deep(None) is None
+    assert scrub_pii_deep(3.14) == 3.14
+
+
+def test_scrub_pii_deep_preserves_anon_lgpd():
+    data = {"email": "abc123456789@anon.lgpd"}
+    assert scrub_pii_deep(data) == data
+
+
+# --- scrub_source_record_phones ---
+
+def test_scrub_source_record_phones_nulls_celular_orientador():
+    payload = {"CelularOrientador": "27988281460", "name": "Test"}
+    result = scrub_source_record_phones(payload)
+    assert result["CelularOrientador"] is None
+    assert result["name"] == "Test"
+
+
+def test_scrub_source_record_phones_nulls_celular_orientado():
+    payload = {"CelularOrientado": "27999215433"}
+    result = scrub_source_record_phones(payload)
+    assert result["CelularOrientado"] is None
+
+
+def test_scrub_source_record_phones_missing_fields_safe():
+    payload = {"OrientadorEmail": "x@anon.lgpd"}
+    result = scrub_source_record_phones(payload)
+    assert result == payload
+
+
+def test_scrub_source_record_phones_returns_new_dict():
+    payload = {"CelularOrientador": "123"}
+    result = scrub_source_record_phones(payload)
+    assert result is not payload

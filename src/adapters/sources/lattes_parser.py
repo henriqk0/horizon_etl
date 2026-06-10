@@ -333,10 +333,11 @@ class LattesParser:
             # Try specific keys first, then generic
             student_name = item.get("orientando") or item.get("nome_do_orientado")
 
-            year_str = (
-                item.get("ano_conclusao") or item.get("ano_inicio") or item.get("ano")
-            )
-            year = int(year_str) if year_str and str(year_str).isdigit() else None
+            start_year_str = item.get("ano_inicio")
+            end_year_str = item.get("ano_conclusao") or item.get("ano")
+            start_year = int(start_year_str) if start_year_str and str(start_year_str).isdigit() else None
+            end_year = int(end_year_str) if end_year_str and str(end_year_str).isdigit() else None
+            year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")
 
@@ -378,6 +379,8 @@ class LattesParser:
                         "normalized_title": self.normalize_title(title),
                         "student_name": student_name,
                         "year": year,
+                        "start_year": start_year,
+                        "end_year": end_year,
                         "institution": institution,
                         "type": canonical_type,
                         "status": status,
@@ -424,11 +427,11 @@ class LattesParser:
             title = item.get("titulo")
             student_name = item.get("orientando") or item.get("nome_do_orientado")
 
-            # Year logic: try 'ano_conclusao', then 'ano_inicio', then 'ano'
-            year_str = (
-                item.get("ano_conclusao") or item.get("ano_inicio") or item.get("ano")
-            )
-            year = int(year_str) if year_str and str(year_str).isdigit() else None
+            start_year_str = item.get("ano_inicio")
+            end_year_str = item.get("ano_conclusao") or item.get("ano")
+            start_year = int(start_year_str) if start_year_str and str(start_year_str).isdigit() else None
+            end_year = int(end_year_str) if end_year_str and str(end_year_str).isdigit() else None
+            year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")
 
@@ -439,6 +442,8 @@ class LattesParser:
                         "normalized_title": self.normalize_title(title),
                         "student_name": student_name,
                         "year": year,
+                        "start_year": start_year,
+                        "end_year": end_year,
                         "institution": institution,
                         "type": canonical_type,
                         "status": status,
