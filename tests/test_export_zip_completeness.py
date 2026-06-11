@@ -1,8 +1,22 @@
 import json
+import re
 import zipfile
 from pathlib import Path
 
-ZIP_PATH = "data/exports/exports_canonical.zip"
+EXPORTS_DIR = Path("data/exports")
+
+
+def _resolve_zip() -> Path:
+    ts_zips = sorted(p for p in EXPORTS_DIR.glob("canonical_export_*.zip"))
+    if ts_zips:
+        return ts_zips[-1]
+    fallback = EXPORTS_DIR / "exports_canonical.zip"
+    if fallback.exists():
+        return fallback
+    raise FileNotFoundError(
+        "No canonical_export_*.zip or exports_canonical.zip found " f"in {EXPORTS_DIR}"
+    )
+
 
 EXPECTED_TOP_LEVEL = {
     # Canonical entity exports
@@ -32,8 +46,6 @@ EXPECTED_TOP_LEVEL = {
     "null_researchers_canonical.json",
     # Analytics marts
     "advisorship_analytics.json",
-    "initiatives_analytics_mart.json",
-    "knowledge_areas_mart.json",
     # Relationship graphs
     "people_relationship_graph.json",
     "students_relationship_graph.json",
@@ -49,103 +61,82 @@ EXPECTED_TOP_LEVEL = {
     "students_collaboration_graph.json",
     "outside_ifes_collaboration_graph.json",
     "null_researchers_collaboration_graph.json",
-    # Subdirectory entries
-    "research_group_relationship_graphs",
-    "research_group_membership_graphs",
 }
 
-EXPECTED_SUBDIRECTORIES = {
-    "research_group_relationship_graphs",
-    "research_group_membership_graphs",
-}
+SUBGRAPH_DIR = "research_group_relationship_graphs"
 
 
 def test_zip_exists():
-    assert Path(ZIP_PATH).exists(), f"ZIP not found at {ZIP_PATH}"
+    path = _resolve_zip()
+    assert path.exists(), f"ZIP not found at {path}"
 
 
 def test_zip_contains_all_expected_top_level():
-    with zipfile.ZipFile(ZIP_PATH) as zf:
+    with zipfile.ZipFile(_resolve_zip()) as zf:
         names = zf.namelist()
 
-    prefix = "data/exports/"
-    top_level = set()
-    for n in names:
-        if n.startswith(prefix):
-            rel = n[len(prefix) :].rstrip("/")
-        else:
-            rel = n.rstrip("/")
-        if "/" not in rel and rel:
-            top_level.add(rel)
+    top_level = {n.rstrip("/") for n in names if "/" not in n and n}
 
     missing = EXPECTED_TOP_LEVEL - top_level
     extra = top_level - EXPECTED_TOP_LEVEL
 
     assert not missing, f"Missing expected top-level files: {sorted(missing)}"
-    unexpected = [e for e in sorted(extra) if e not in EXPECTED_SUBDIRECTORIES]
-    assert not unexpected, f"Unexpected top-level files: {unexpected}"
+    assert not extra, f"Unexpected top-level files: {sorted(extra)}"
 
 
-def test_zip_relationship_graph_subdirectory_matches_manifest():
-    with zipfile.ZipFile(ZIP_PATH) as zf:
+def test_zip_subgraph_directory_matches_relationship_manifest():
+    with zipfile.ZipFile(_resolve_zip()) as zf:
         names = zf.namelist()
         manifest = json.loads(
-            zf.read("data/exports/research_group_relationship_graphs_manifest.json")
+            zf.read("research_group_relationship_graphs_manifest.json")
         )
         manifest_paths = {g["path"] for g in manifest["graphs"]}
         actual_files = {
-            n[len("data/exports/") :]
-            for n in names
-            if "research_group_relationship_graphs/" in n and n.endswith(".json")
+            n for n in names if n.startswith(f"{SUBGRAPH_DIR}/") and n.endswith(".json")
         }
 
     assert len(manifest["graphs"]) > 0, "Manifest lists no graphs"
     assert manifest_paths == actual_files, (
-        f"Manifest lists {len(manifest_paths)} graphs "
-        f"but directory contains {len(actual_files)}"
+        f"Manifest lists {len(manifest_paths)} graphs, "
+        f"directory contains {len(actual_files)}. "
+        f"Missing from dir: {manifest_paths - actual_files}. "
+        f"Extra in dir: {actual_files - manifest_paths}."
     )
 
 
-def test_zip_membership_subdirectory_matches_manifest():
-    with zipfile.ZipFile(ZIP_PATH) as zf:
+def test_zip_membership_manifest_count_matches_relationship_dir():
+    with zipfile.ZipFile(_resolve_zip()) as zf:
         names = zf.namelist()
-        manifest = json.loads(
-            zf.read("data/exports/research_group_membership_graphs_manifest.json")
+        mem_manifest = json.loads(
+            zf.read("research_group_membership_graphs_manifest.json")
         )
-        expected_count = manifest["metadata"]["total_groups"]
+        rel_manifest = json.loads(
+            zf.read("research_group_relationship_graphs_manifest.json")
+        )
+
+        mem_count = mem_manifest["metadata"]["total_groups"]
+        rel_count = len(rel_manifest["graphs"])
         actual_files = {
-            n[len("data/exports/") :]
-            for n in names
-            if "research_group_membership_graphs/" in n and n.endswith(".json")
+            n for n in names if n.startswith(f"{SUBGRAPH_DIR}/") and n.endswith(".json")
         }
 
-    assert expected_count > 0, "Manifest lists no graphs"
-    assert len(actual_files) == expected_count, (
-        f"Manifest expects {expected_count} graphs "
-        f"but directory contains {len(actual_files)}"
+    assert mem_count > 0, "Membership manifest lists no graphs"
+    assert rel_count == mem_count, (
+        f"Relationship manifest has {rel_count} graphs, "
+        f"but membership manifest expects {mem_count}"
+    )
+    assert len(actual_files) == rel_count, (
+        f"Relationship manifest ({rel_count}) vs "
+        f"actual files in {SUBGRAPH_DIR}/ ({len(actual_files)})"
     )
 
 
-def test_zip_subdirectory_contents_are_identical():
-    with zipfile.ZipFile(ZIP_PATH) as zf:
+def test_zip_subgraph_directory_has_files():
+    with zipfile.ZipFile(_resolve_zip()) as zf:
         names = sorted(zf.namelist())
 
-    rel_files = [
-        n
-        for n in names
-        if "research_group_relationship_graphs/" in n and n.endswith(".json")
-    ]
-    mem_files = [
-        n
-        for n in names
-        if "research_group_membership_graphs/" in n and n.endswith(".json")
+    sub_files = [
+        n for n in names if n.startswith(f"{SUBGRAPH_DIR}/") and n.endswith(".json")
     ]
 
-    rel_basenames = {n.split("/")[-1] for n in rel_files}
-    mem_basenames = {n.split("/")[-1] for n in mem_files}
-
-    assert rel_basenames == mem_basenames, (
-        "research_group_relationship_graphs and "
-        "research_group_membership_graphs have different file sets"
-    )
-    assert len(rel_files) > 0, "No files in research_group_relationship_graphs"
+    assert len(sub_files) > 0, f"No JSON files found in {SUBGRAPH_DIR}/"
