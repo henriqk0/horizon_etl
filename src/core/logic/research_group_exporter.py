@@ -125,7 +125,11 @@ class ResearchGroupExporter:
                             and tm.person.emails
                         ):
                             email_list = [
-                                anonymize_email(e.email) if not is_anonymized_email(e.email) else e.email
+                                (
+                                    anonymize_email(e.email)
+                                    if not is_anonymized_email(e.email)
+                                    else e.email
+                                )
                                 for e in tm.person.emails
                             ]
 

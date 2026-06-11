@@ -11,6 +11,7 @@ Validations:
   B. A record's last-known dates should match the year folder of its latest source
   C. Optionally filter by date range to check specific periods
 """
+
 import argparse
 import glob
 import json
@@ -40,14 +41,16 @@ def load_all_xlsx_advisorships(base_dir="data/raw/sigpesq/advisorships"):
             codpt_match = re.search(r"\d+", codpt)
             normalized_codpt = codpt_match.group(0) if codpt_match else ""
 
-            records.append({
-                "Id": row.get("Id"),
-                "CodPT": codpt,
-                "CodPT_normalized": normalized_codpt,
-                "Inicio_raw": row.get("Inicio", ""),
-                "Fim_raw": row.get("Fim", ""),
-                "Ano": row.get("Ano"),
-            })
+            records.append(
+                {
+                    "Id": row.get("Id"),
+                    "CodPT": codpt,
+                    "CodPT_normalized": normalized_codpt,
+                    "Inicio_raw": row.get("Inicio", ""),
+                    "Fim_raw": row.get("Fim", ""),
+                    "Ano": row.get("Ano"),
+                }
+            )
         xlsx_records[year] = records
 
     return xlsx_records
@@ -179,9 +182,11 @@ def validate_advisorships(date_from=None, date_to=None):
         present_in = sorted(codpt_to_years[ncodpt])
 
         # B. Is the CodPT in one of its match sources?
-        all_known_sources = (parsed["match_sources"]
-                            | {parsed["first_source_year"]}
-                            | {parsed["latest_source_year"]})
+        all_known_sources = (
+            parsed["match_sources"]
+            | {parsed["first_source_year"]}
+            | {parsed["latest_source_year"]}
+        )
         all_known_sources.discard(None)
 
         if not all_known_sources.intersection(present_in):
@@ -252,22 +257,32 @@ def print_report(results):
             print(f"  • {issue}")
         print()
 
-    total_issues = len(results["missing_from_source"]) + len(results["date_source_mismatch"])
+    total_issues = len(results["missing_from_source"]) + len(
+        results["date_source_mismatch"]
+    )
     if total_issues == 0:
         print("  ✅ All records match their expected source xlsx correctly.")
     else:
         print(f"  Found {total_issues} issue(s).")
         print("  (Mismatches can be legitimate: same CodPT may appear across multiple")
-        print("   year xlsx files, each with different date ranges for different phases.)")
+        print(
+            "   year xlsx files, each with different date ranges for different phases.)"
+        )
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Validate xlsx vs full-refresh correspondence")
-    parser.add_argument("--from", dest="date_from", help="Start date filter (YYYY-MM-DD)")
+    parser = argparse.ArgumentParser(
+        description="Validate xlsx vs full-refresh correspondence"
+    )
+    parser.add_argument(
+        "--from", dest="date_from", help="Start date filter (YYYY-MM-DD)"
+    )
     parser.add_argument("--to", dest="date_to", help="End date filter (YYYY-MM-DD)")
     args = parser.parse_args()
 
-    date_from = datetime.strptime(args.date_from, "%Y-%m-%d") if args.date_from else None
+    date_from = (
+        datetime.strptime(args.date_from, "%Y-%m-%d") if args.date_from else None
+    )
     date_to = datetime.strptime(args.date_to, "%Y-%m-%d") if args.date_to else None
 
     results = validate_advisorships(date_from, date_to)

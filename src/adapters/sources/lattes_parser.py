@@ -335,8 +335,16 @@ class LattesParser:
 
             start_year_str = item.get("ano_inicio")
             end_year_str = item.get("ano_conclusao") or item.get("ano")
-            start_year = int(start_year_str) if start_year_str and str(start_year_str).isdigit() else None
-            end_year = int(end_year_str) if end_year_str and str(end_year_str).isdigit() else None
+            start_year = (
+                int(start_year_str)
+                if start_year_str and str(start_year_str).isdigit()
+                else None
+            )
+            end_year = (
+                int(end_year_str)
+                if end_year_str and str(end_year_str).isdigit()
+                else None
+            )
             year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")
@@ -429,8 +437,16 @@ class LattesParser:
 
             start_year_str = item.get("ano_inicio")
             end_year_str = item.get("ano_conclusao") or item.get("ano")
-            start_year = int(start_year_str) if start_year_str and str(start_year_str).isdigit() else None
-            end_year = int(end_year_str) if end_year_str and str(end_year_str).isdigit() else None
+            start_year = (
+                int(start_year_str)
+                if start_year_str and str(start_year_str).isdigit()
+                else None
+            )
+            end_year = (
+                int(end_year_str)
+                if end_year_str and str(end_year_str).isdigit()
+                else None
+            )
             year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")

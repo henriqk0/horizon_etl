@@ -9,9 +9,7 @@ from src.core.logic.research_group_exporter import ResearchGroupExporter
 from src.core.ports.export_sink import IExportSink
 
 RAW_CPF_PATTERN = re.compile(r"\d{3}\.\d{3}\.\d{3}-\d{2}")
-RAW_EMAIL_PATTERN = re.compile(
-    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
-)
+RAW_EMAIL_PATTERN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 ANONYMIZED_DOMAIN = "@anon.lgpd"
 
 
@@ -50,9 +48,7 @@ def test_researcher_export_identification_id_is_anonymized():
     exporter.initiative_ctrl.get_all.return_value = []
     exporter.initiative_ctrl.list_initiative_types.return_value = []
     exporter._get_session = lambda: None
-    exporter._get_campus_resolver = lambda: MagicMock(
-        get_campus=lambda *a, **kw: None
-    )
+    exporter._get_campus_resolver = lambda: MagicMock(get_campus=lambda *a, **kw: None)
     exporter._fetch_researcher_advisorship_rows = lambda _: []
 
     exporter.export_researchers("output/researchers_canonical.json")
@@ -89,9 +85,7 @@ def test_researcher_export_no_raw_cpf_in_any_classification_view():
     exporter.initiative_ctrl.get_all.return_value = []
     exporter.initiative_ctrl.list_initiative_types.return_value = []
     exporter._get_session = lambda: None
-    exporter._get_campus_resolver = lambda: MagicMock(
-        get_campus=lambda *a, **kw: None
-    )
+    exporter._get_campus_resolver = lambda: MagicMock(get_campus=lambda *a, **kw: None)
     exporter._fetch_researcher_advisorship_rows = lambda _: []
 
     exporter.export_researchers("output/researchers_canonical.json")

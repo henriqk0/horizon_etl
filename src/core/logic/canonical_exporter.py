@@ -1586,7 +1586,9 @@ class CanonicalDataExporter:
             )
             r_dict["campus"] = resolver.get_campus("researcher", p_id_int or p_id)
 
-            if r_dict.get("identification_id") and not is_anonymized_cpf(r_dict["identification_id"]):
+            if r_dict.get("identification_id") and not is_anonymized_cpf(
+                r_dict["identification_id"]
+            ):
                 r_dict = anonymize_person_data(r_dict)
             export_data.append(r_dict)
 

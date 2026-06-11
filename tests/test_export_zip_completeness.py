@@ -92,9 +92,7 @@ def test_zip_relationship_graph_subdirectory_matches_manifest():
         manifest = json.loads(
             zf.read("data/exports/research_group_relationship_graphs_manifest.json")
         )
-        manifest_paths = {
-            g["path"] for g in manifest["graphs"]
-        }
+        manifest_paths = {g["path"] for g in manifest["graphs"]}
         actual_files = {
             n[len("data/exports/") :]
             for n in names

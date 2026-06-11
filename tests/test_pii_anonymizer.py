@@ -199,6 +199,7 @@ def test_anonymize_person_data_already_anonymized_cpf_still_hashes_again():
 
 # --- scrub_emails_from_text ---
 
+
 def test_scrub_emails_from_text_replaces_email():
     result = scrub_emails_from_text("Contact: user@example.com for details.")
     assert "user@example.com" not in result
@@ -237,6 +238,7 @@ def test_scrub_emails_from_text_lideres_pattern():
 
 
 # --- scrub_pii_deep ---
+
 
 def test_scrub_pii_deep_string():
     result = scrub_pii_deep("email: foo@bar.com")
@@ -277,6 +279,7 @@ def test_scrub_pii_deep_preserves_anon_lgpd():
 
 
 # --- scrub_source_record_phones ---
+
 
 def test_scrub_source_record_phones_nulls_celular_orientador():
     payload = {"CelularOrientador": "27988281460", "name": "Test"}
