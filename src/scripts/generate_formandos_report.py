@@ -21,12 +21,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-import re
 
 import openpyxl
 
@@ -34,10 +33,29 @@ import openpyxl
 # String normalization
 # ---------------------------------------------------------------------------
 
-_LOWER_WORDS = frozenset({
-    "de", "da", "do", "das", "dos", "e", "a", "o", "em", "com",
-    "para", "por", "ou", "um", "uma", "no", "na", "nos", "nas",
-})
+_LOWER_WORDS = frozenset(
+    {
+        "de",
+        "da",
+        "do",
+        "das",
+        "dos",
+        "e",
+        "a",
+        "o",
+        "em",
+        "com",
+        "para",
+        "por",
+        "ou",
+        "um",
+        "uma",
+        "no",
+        "na",
+        "nos",
+        "nas",
+    }
+)
 # Acronyms: all ASCII uppercase/digits, max 6 chars (PIBIC, CAPES, IFES, IA…)
 _ACRONYM_RE = re.compile(r"^[A-Z0-9]{2,6}$")
 # Preserve as-is: explicitly known mixed-case terms
@@ -88,6 +106,7 @@ def normalize_name(text: str) -> str:
             result.append(word[0].upper() + word[1:].lower() if word else word)
     return " ".join(result)
 
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -106,6 +125,7 @@ SEMESTER_FILE_MAP = {
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def _parse_matricula(mat: str) -> dict | None:
     """Extract entry year and semester from matricula like '20181BSI0056'."""
@@ -126,7 +146,12 @@ def load_formandos(semester: str) -> list[dict]:
     wb = openpyxl.load_workbook(path)
     ws = wb.active
     return [
-        {"nome": r[1], "curso": r[3], "matricula": r[0], "entry": _parse_matricula(str(r[0]))}
+        {
+            "nome": r[1],
+            "curso": r[3],
+            "matricula": r[0],
+            "entry": _parse_matricula(str(r[0])),
+        }
         for r in ws.iter_rows(values_only=True, min_row=2)
         if r[1]
     ]
@@ -156,23 +181,27 @@ def load_lattes() -> dict[str, list[dict]]:
         for status in ("em_andamento", "concluidas"):
             d = (data.get("orientacoes") or {}).get(status, {}) or {}
             for item in d.get("iniciacao_cientifica", []):
-                ic.append({
-                    "orientando": (item.get("orientando") or "").strip(),
-                    "titulo": item.get("titulo", ""),
-                    "ano_inicio": item.get("ano_inicio"),
-                    "ano_conclusao": item.get("ano_conclusao"),
-                    "supervisor": nome_sup,
-                    "status": status,
-                })
+                ic.append(
+                    {
+                        "orientando": (item.get("orientando") or "").strip(),
+                        "titulo": item.get("titulo", ""),
+                        "ano_inicio": item.get("ano_inicio"),
+                        "ano_conclusao": item.get("ano_conclusao"),
+                        "supervisor": nome_sup,
+                        "status": status,
+                    }
+                )
             for item in d.get("tcc", []):
-                tcc.append({
-                    "orientando": (item.get("orientando") or "").strip(),
-                    "titulo": item.get("titulo", ""),
-                    "ano_inicio": item.get("ano_inicio"),
-                    "ano_conclusao": item.get("ano_conclusao"),
-                    "supervisor": nome_sup,
-                    "status": status,
-                })
+                tcc.append(
+                    {
+                        "orientando": (item.get("orientando") or "").strip(),
+                        "titulo": item.get("titulo", ""),
+                        "ano_inicio": item.get("ano_inicio"),
+                        "ano_conclusao": item.get("ano_conclusao"),
+                        "supervisor": nome_sup,
+                        "status": status,
+                    }
+                )
     return {"ic": ic, "tcc": tcc}
 
 
@@ -180,16 +209,19 @@ def load_lattes() -> dict[str, list[dict]]:
 # Stats computation
 # ---------------------------------------------------------------------------
 
-def compute(formandos: list[dict], adv_projects: list[dict],
-            rgs: list[dict], lattes: dict[str, list[dict]] | None = None,
-            grad_semester: str = "") -> dict:
+
+def compute(
+    formandos: list[dict],
+    adv_projects: list[dict],
+    rgs: list[dict],
+    lattes: dict[str, list[dict]] | None = None,
+    grad_semester: str = "",
+) -> dict:
     names_map: dict[str, str] = {
         f["nome"].lower().strip(): f["curso"] for f in formandos
     }
     entry_map: dict[str, dict] = {
-        f["nome"].lower().strip(): f["entry"]
-        for f in formandos
-        if f.get("entry")
+        f["nome"].lower().strip(): f["entry"] for f in formandos if f.get("entry")
     }
     total = len(formandos)
 
@@ -249,13 +281,15 @@ def compute(formandos: list[dict], adv_projects: list[dict],
                     days = (e - s).days
                 except Exception:
                     pass
-                person_fellowship_records[pid].append({
-                    "year": year,
-                    "sponsor": sponsor,
-                    "fellowship": fname,
-                    "days": days,
-                    "value": fel.get("value") or 0.0,
-                })
+                person_fellowship_records[pid].append(
+                    {
+                        "year": year,
+                        "sponsor": sponsor,
+                        "fellowship": fname,
+                        "days": days,
+                        "value": fel.get("value") or 0.0,
+                    }
+                )
                 sponsor_persons[sponsor].add(pid)
                 fellowship_persons[fname].add(pid)
 
@@ -264,7 +298,8 @@ def compute(formandos: list[dict], adv_projects: list[dict],
     rg_top: Counter = Counter()
     for rg in rgs:
         members_in = [
-            m for m in (rg.get("members") or [])
+            m
+            for m in (rg.get("members") or [])
             if (m.get("name") or "").lower().strip() in names_map
         ]
         if members_in:
@@ -292,7 +327,9 @@ def compute(formandos: list[dict], adv_projects: list[dict],
             sponsor_investment[r["sponsor"]] += r["value"]
 
     # ---- sponsor × fellowship (unique persons) ----
-    sponsor_fellowship_unique: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    sponsor_fellowship_unique: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     sf_persons: dict[tuple, set] = defaultdict(set)
     for pid, recs in person_fellowship_records.items():
         for r in recs:
@@ -302,12 +339,12 @@ def compute(formandos: list[dict], adv_projects: list[dict],
 
     # ---- curso × sponsor ----
     curso_sponsor: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    curso_sponsor_sets: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
+    curso_sponsor_sets: dict[str, dict[str, set]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for pid, recs in person_fellowship_records.items():
         # find curso by name
-        pid_name = next(
-            (n for n, p in name_to_pid.items() if p == pid), None
-        )
+        pid_name = next((n for n, p in name_to_pid.items() if p == pid), None)
         if pid_name is None:
             continue
         curso = names_map.get(pid_name, "N/A")
@@ -357,9 +394,7 @@ def compute(formandos: list[dict], adv_projects: list[dict],
                 prog["misto"] += 1
         elif len(set(paid)) > 1:
             prog["multi-agencia"] += 1
-    multi_bolsa = sum(
-        1 for recs in person_fellowship_records.values() if len(recs) > 1
-    )
+    multi_bolsa = sum(1 for recs in person_fellowship_records.values() if len(recs) > 1)
 
     # ---- orientadores distribution ----
     sup_dist = Counter(len(v) for v in person_supervisors.values())
@@ -393,12 +428,13 @@ def compute(formandos: list[dict], adv_projects: list[dict],
     _ka_raw: dict[str, int] = defaultdict(int)
     for rg in rgs:
         members_in = [
-            m for m in (rg.get("members") or [])
+            m
+            for m in (rg.get("members") or [])
             if (m.get("name") or "").lower().strip() in names_map
         ]
         if not members_in:
             continue
-        for ka in (rg.get("knowledge_areas") or []):
+        for ka in rg.get("knowledge_areas") or []:
             raw_name = ka.get("name", "")
             translated = _KA_TRANSLATE.get(raw_name.lower().strip(), raw_name)
             key = normalize_str(translated)
@@ -421,26 +457,31 @@ def compute(formandos: list[dict], adv_projects: list[dict],
         """Semesters from entry (ey/es) to IC start (iy/i_s)."""
         return (iy - ey) * 2 + (i_s - es)
 
-    ic_period_dist: Counter = Counter()   # semesters after entry → count
-    ic_year_dist: Counter = Counter()     # calendar year of first IC → count
-    ic_timing_records: list[dict] = []    # per-person detail
+    ic_period_dist: Counter = Counter()  # semesters after entry → count
+    ic_year_dist: Counter = Counter()  # calendar year of first IC → count
+    ic_timing_records: list[dict] = []  # per-person detail
 
     for pid, ic_date in person_first_ic.items():
         name = pid_to_name.get(pid, "")
         entry = entry_map.get(name)
         ic_year_dist[ic_date.year] += 1
         if entry:
-            diff = _sem_diff(entry["year"], entry["semester"],
-                             *_date_to_sem(ic_date.year, ic_date.month))
+            diff = _sem_diff(
+                entry["year"],
+                entry["semester"],
+                *_date_to_sem(ic_date.year, ic_date.month),
+            )
             if 0 <= diff <= 12:  # sanity: within 6 years
                 ic_period_dist[diff] += 1
-                ic_timing_records.append({
-                    "name": normalize_name(name),
-                    "entry": f"{entry['year']}/{entry['semester']}",
-                    "ic_start": ic_date.strftime("%Y/%m"),
-                    "semesters_after": diff,
-                    "curso": names_map.get(name, ""),
-                })
+                ic_timing_records.append(
+                    {
+                        "name": normalize_name(name),
+                        "entry": f"{entry['year']}/{entry['semester']}",
+                        "ic_start": ic_date.strftime("%Y/%m"),
+                        "semesters_after": diff,
+                        "curso": names_map.get(name, ""),
+                    }
+                )
 
     ic_timing_records.sort(key=lambda x: x["semesters_after"])
 
@@ -503,9 +544,13 @@ def compute(formandos: list[dict], adv_projects: list[dict],
 
     def _gcategories(vals: list[int]) -> dict:
         transfers = [v for v in vals if v < 4]
-        regular   = [v for v in vals if 4 <= v <= 24]
-        extended  = [v for v in vals if v > 24]
-        return {"transfers": len(transfers), "regular": len(regular), "extended": len(extended)}
+        regular = [v for v in vals if 4 <= v <= 24]
+        extended = [v for v in vals if v > 24]
+        return {
+            "transfers": len(transfers),
+            "regular": len(regular),
+            "extended": len(extended),
+        }
 
     _all_cursos = sorted(set(list(_grad_by_curso.keys())))
     graduation_time = {
@@ -613,7 +658,9 @@ def compute(formandos: list[dict], adv_projects: list[dict],
             "avg_sigpesq": _avg(sp_vals),
             "avg_union": _avg(union_vals),
             "delta_avg": round(_avg(union_vals) - _avg(sp_vals), 2),
-            "delta_pct": round((_avg(union_vals) / _avg(sp_vals) - 1) * 100, 1) if sp_vals else 0,
+            "delta_pct": (
+                round((_avg(union_vals) / _avg(sp_vals) - 1) * 100, 1) if sp_vals else 0
+            ),
             "enriched_count": len(enriched),
             "enriched_top": enriched[:10],
             "sp_dist": sp_dist,
@@ -629,7 +676,9 @@ def compute(formandos: list[dict], adv_projects: list[dict],
         "fellowship_counts": fellowship_counts,
         "sponsor_counts": sponsor_counts,
         "sponsor_investment": dict(sponsor_investment),
-        "sponsor_fellowship_unique": {k: dict(v) for k, v in sponsor_fellowship_unique.items()},
+        "sponsor_fellowship_unique": {
+            k: dict(v) for k, v in sponsor_fellowship_unique.items()
+        },
         "curso_total": dict(curso_total),
         "curso_with": dict(curso_with),
         "curso_sponsor": {k: dict(v) for k, v in curso_sponsor.items()},
@@ -645,7 +694,9 @@ def compute(formandos: list[dict], adv_projects: list[dict],
         "top_sups": [(s, len(pids)) for s, pids in top_sups],
         "rg_top": rg_top_list,
         "ka_top": ka_counter.most_common(15),
-        "total_with_fellowship": len(set().union(*fellowship_persons.values())) if fellowship_persons else 0,
+        "total_with_fellowship": (
+            len(set().union(*fellowship_persons.values())) if fellowship_persons else 0
+        ),
         "lattes_cross": lattes_cross,
         "ic_timing": ic_timing,
         "graduation_time": graduation_time,
@@ -731,8 +782,7 @@ footer { text-align:center; margin-top:48px; font-size:11px; color:var(--sub); }
 """
 
 
-def bar(label: str, value: int, max_val: int, color: str,
-        lbl_class: str = "") -> str:
+def bar(label: str, value: int, max_val: int, color: str, lbl_class: str = "") -> str:
     pct = value / max_val * 100 if max_val else 0
     return (
         f'<div class="bar-row">'
@@ -740,21 +790,19 @@ def bar(label: str, value: int, max_val: int, color: str,
         f'<div class="bar-track"><div class="bar-fill" '
         f'style="width:{pct:.1f}%;background:{color};"></div></div>'
         f'<span class="val" style="color:{color};">{value}</span>'
-        f'</div>'
+        f"</div>"
     )
 
 
-def mini_card_agency(name: str, color: str, count: int,
-                     fellowship_breakdown: dict, investment: float) -> str:
+def mini_card_agency(
+    name: str, color: str, count: int, fellowship_breakdown: dict, investment: float
+) -> str:
     rows = "".join(
         f'<div class="pill-row"><span style="color:var(--text);">{k}</span>'
         f'<span style="color:var(--green);">{v}</span></div>'
         for k, v in sorted(fellowship_breakdown.items())
     )
-    inv_str = (
-        f'R$ {investment:,.0f}'.replace(",", ".")
-        if investment > 0 else "R$ 0"
-    )
+    inv_str = f"R$ {investment:,.0f}".replace(",", ".") if investment > 0 else "R$ 0"
     return f"""
     <div class="mini-card">
       <div class="agency" style="color:{color};">{name}</div>
@@ -777,16 +825,17 @@ def section(title: str, sub: str, body: str, border_color: str = "") -> str:
     style = f' style="border-color:{border_color};"' if border_color else ""
     return (
         f'<div class="section"{style}>'
-        f'<h2>{title}</h2>'
+        f"<h2>{title}</h2>"
         f'<div class="sub">{sub}</div>'
-        f'{body}'
-        f'</div>'
+        f"{body}"
+        f"</div>"
     )
 
 
 # ---------------------------------------------------------------------------
 # Section generators
 # ---------------------------------------------------------------------------
+
 
 def _sec_stats(s: dict) -> str:
     pct_sem = round(s["sem_pesquisa"] / s["total"] * 100, 1)
@@ -826,8 +875,8 @@ def _sec_curso(s: dict) -> str:
             f'{bar(f"com pesquisa", with_c, total_c, "var(--green)", "md")}'
             f'{bar(f"sem pesquisa", total_c-with_c, total_c, "var(--red)", "md")}'
             f'<div style="font-size:11px;color:var(--sub);margin-top:4px;">'
-            f'{pct}% do {short} com pesquisa</div>'
-            f'</div>'
+            f"{pct}% do {short} com pesquisa</div>"
+            f"</div>"
         )
     return section("Distribuição por curso", "formandos por curso e participação", rows)
 
@@ -838,9 +887,12 @@ def _sec_fellowship(s: dict) -> str:
         return ""
     max_v = max(counts.values())
     COLORS = {
-        "PIBIC": "var(--green)", "PIVIC": "var(--green2)",
-        "PIBITI": "var(--amber)", "PIVITI": "var(--blue)",
-        "PIBIC-JR": "var(--gray)", "PROPÓS": "var(--gray)",
+        "PIBIC": "var(--green)",
+        "PIVIC": "var(--green2)",
+        "PIBITI": "var(--amber)",
+        "PIVITI": "var(--blue)",
+        "PIBIC-JR": "var(--gray)",
+        "PROPÓS": "var(--gray)",
     }
     rows = "".join(
         bar(k, v, max_v, COLORS.get(k, "var(--sub)"))
@@ -855,8 +907,10 @@ def _sec_fellowship(s: dict) -> str:
 
 def _sec_agencies(s: dict) -> str:
     AGENCY_COLORS = {
-        "Fapes": "var(--amber)", "CNPq": "var(--blue)",
-        "Ifes": "var(--green2)", "Voluntário": "var(--sub)",
+        "Fapes": "var(--amber)",
+        "CNPq": "var(--blue)",
+        "Ifes": "var(--green2)",
+        "Voluntário": "var(--sub)",
     }
     order = ["Fapes", "CNPq", "Ifes", "Voluntário"]
     cards = "".join(
@@ -875,9 +929,12 @@ def _sec_agencies(s: dict) -> str:
     max_paid = max(paid.values()) if paid else 1
     total_paid = sum(paid.values())
     bars_paid = "".join(
-        bar(k, v, max_paid, AGENCY_COLORS.get(k, "var(--gray)"), "md")
-        + f'<span style="font-size:10px;color:var(--sub);"> {round(v/total_paid*100)}%</span>'
-        if total_paid else bar(k, v, max_paid, AGENCY_COLORS.get(k, "var(--gray)"), "md")
+        (
+            bar(k, v, max_paid, AGENCY_COLORS.get(k, "var(--gray)"), "md")
+            + f'<span style="font-size:10px;color:var(--sub);"> {round(v/total_paid*100)}%</span>'
+            if total_paid
+            else bar(k, v, max_paid, AGENCY_COLORS.get(k, "var(--gray)"), "md")
+        )
         for k, v in sorted(paid.items(), key=lambda x: -x[1])
     )
 
@@ -887,37 +944,41 @@ def _sec_agencies(s: dict) -> str:
     max_invest = max(invest.values()) if invest else 1
 
     def _fmt_brl(v: float) -> str:
-        return f'R$ {v:,.0f}'.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"R$ {v:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
     invest_bars = "".join(
         f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
         f'<span style="font-size:12px;color:var(--text);width:90px;flex-shrink:0;">{ag}</span>'
         f'<div style="flex:1;height:14px;background:#1a2a1a;border-radius:3px;overflow:hidden;">'
         f'<div style="width:{round(v/max_invest*100)}%;height:100%;background:{AGENCY_COLORS.get(ag,"var(--sub)")};">'
-        f'</div></div>'
+        f"</div></div>"
         f'<span style="font-size:12px;font-weight:600;color:{AGENCY_COLORS.get(ag,"var(--sub)")};width:90px;text-align:right;">'
-        f'{_fmt_brl(v)}</span>'
+        f"{_fmt_brl(v)}</span>"
         f'<span style="font-size:11px;color:var(--sub);width:80px;text-align:right;">'
         f'{_fmt_brl(v / s["sponsor_counts"].get(ag, 1))}/aluno</span>'
-        f'</div>'
+        f"</div>"
         for ag, v in sorted(invest.items(), key=lambda x: -x[1])
     )
 
     invest_block = (
-        f'<div style="background:#0a160a;border:1px solid var(--border);border-radius:6px;'
-        f'padding:14px 16px;margin-bottom:14px;">'
-        f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">'
-        f'<div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:1px;">'
-        f'Investimento em bolsas</div>'
-        f'<div style="font-size:15px;font-weight:700;color:var(--green);">{_fmt_brl(total_invest)}'
-        f'<span style="font-size:10px;color:var(--sub);font-weight:400;"> total acumulado</span></div>'
-        f'</div>'
-        f'{invest_bars}'
-        f'<div style="font-size:10px;color:var(--sub);margin-top:8px;">'
-        f'Valores estimados com base nas mensalidades registradas por bolsa no SigPesq. '
-        f'Bolsas sem valor cadastrado não são contabilizadas.</div>'
-        f'</div>'
-    ) if invest_bars else ""
+        (
+            f'<div style="background:#0a160a;border:1px solid var(--border);border-radius:6px;'
+            f'padding:14px 16px;margin-bottom:14px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">'
+            f'<div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:1px;">'
+            f"Investimento em bolsas</div>"
+            f'<div style="font-size:15px;font-weight:700;color:var(--green);">{_fmt_brl(total_invest)}'
+            f'<span style="font-size:10px;color:var(--sub);font-weight:400;"> total acumulado</span></div>'
+            f"</div>"
+            f"{invest_bars}"
+            f'<div style="font-size:10px;color:var(--sub);margin-top:8px;">'
+            f"Valores estimados com base nas mensalidades registradas por bolsa no SigPesq. "
+            f"Bolsas sem valor cadastrado não são contabilizadas.</div>"
+            f"</div>"
+        )
+        if invest_bars
+        else ""
+    )
 
     note = (
         f'De {s["total_with_fellowship"]} formandos com bolsa formal, '
@@ -934,8 +995,8 @@ def _sec_agencies(s: dict) -> str:
         f'border-radius:6px;padding:14px 16px;margin-bottom:14px;">'
         f'<div style="font-size:11px;color:var(--sub);margin-bottom:10px;'
         f'text-transform:uppercase;letter-spacing:1px;">Participação relativa — bolsa paga</div>'
-        f'{bars_paid}</div>'
-        f'{invest_block}'
+        f"{bars_paid}</div>"
+        f"{invest_block}"
         f'<div class="note"><strong>Interpretação:</strong> {note}</div>'
     )
     return section(
@@ -947,18 +1008,23 @@ def _sec_agencies(s: dict) -> str:
 
 def _sec_curso_sponsor(s: dict) -> str:
     AGENCY_COLORS = {
-        "Fapes": "var(--amber)", "CNPq": "var(--blue)",
-        "Ifes": "var(--green2)", "Voluntário": "var(--sub)",
+        "Fapes": "var(--amber)",
+        "CNPq": "var(--blue)",
+        "Ifes": "var(--green2)",
+        "Voluntário": "var(--sub)",
     }
     sponsor_order = ["Fapes", "Ifes", "CNPq", "Voluntário"]
     cols = ""
     for curso, total_c in sorted(s["curso_total"].items()):
-        short = "Eng. Controle e Automação" if "Controle" in curso else "Sistemas de Informação"
+        short = (
+            "Eng. Controle e Automação"
+            if "Controle" in curso
+            else "Sistemas de Informação"
+        )
         sp = s["curso_sponsor"].get(curso, {})
         max_v = max(sp.values()) if sp else 1
         rows = "".join(
-            bar(ag, sp.get(ag, 0), max_v,
-                AGENCY_COLORS.get(ag, "var(--sub)"), "md")
+            bar(ag, sp.get(ag, 0), max_v, AGENCY_COLORS.get(ag, "var(--sub)"), "md")
             for ag in sponsor_order
             if sp.get(ag, 0) > 0
         )
@@ -966,7 +1032,7 @@ def _sec_curso_sponsor(s: dict) -> str:
             f'<div style="background:#0f1a0f;border:1px solid var(--border);'
             f'border-radius:6px;padding:14px;">'
             f'<div style="font-size:12px;font-weight:600;margin-bottom:12px;">{short}</div>'
-            f'{rows}</div>'
+            f"{rows}</div>"
         )
     body = f'<div class="grid2">{cols}</div>'
     return section(
@@ -979,11 +1045,18 @@ def _sec_curso_sponsor(s: dict) -> str:
 def _sec_projects_duration(s: dict) -> str:
     pd = s["proj_dist"]
     max_p = max(pd.values()) if pd else 1
-    PROJ_COLORS = ["var(--green)", "var(--green2)", "var(--amber)", "var(--amber)", "var(--red)"]
+    PROJ_COLORS = [
+        "var(--green)",
+        "var(--green2)",
+        "var(--amber)",
+        "var(--amber)",
+        "var(--red)",
+    ]
     proj_bars = "".join(
         bar(
             f"{k} projeto{'s' if k > 1 else ''}",
-            v, max_p,
+            v,
+            max_p,
             PROJ_COLORS[min(k - 1, len(PROJ_COLORS) - 1)],
             "md",
         )
@@ -995,9 +1068,9 @@ def _sec_projects_duration(s: dict) -> str:
     )
     proj_col = (
         f'<div class="section" style="margin-bottom:0;">'
-        f'<h2>Projetos por formando</h2>'
+        f"<h2>Projetos por formando</h2>"
         f'<div class="sub">dentre formandos com projetos registrados</div>'
-        f'{proj_bars}{proj_note}</div>'
+        f"{proj_bars}{proj_note}</div>"
     )
 
     # duration
@@ -1009,15 +1082,18 @@ def _sec_projects_duration(s: dict) -> str:
 
     dur_col = (
         f'<div class="section" style="margin-bottom:0;">'
-        f'<h2>Duração de bolsa</h2>'
+        f"<h2>Duração de bolsa</h2>"
         f'<div class="sub">{total_d} registros com data de início/fim</div>'
         f'{bar("7–12 meses", db.get("7-12m",0), total_d, "var(--green)", "md")} '
         f'<span style="font-size:10px;color:var(--sub);">{pct_7_12}%</span>'
         f'{bar("≤ 6 meses", db.get("≤6m",0), total_d, "var(--amber)", "md")} '
         f'<span style="font-size:10px;color:var(--sub);">{pct_le6}%</span>'
-        + (f'{bar("> 12 meses", db.get(">12m",0), total_d, "var(--blue)", "md")} '
-           f'<span style="font-size:10px;color:var(--sub);">{pct_gt12}%</span>'
-           if db.get(">12m", 0) > 0 else "")
+        + (
+            f'{bar("> 12 meses", db.get(">12m",0), total_d, "var(--blue)", "md")} '
+            f'<span style="font-size:10px;color:var(--sub);">{pct_gt12}%</span>'
+            if db.get(">12m", 0) > 0
+            else ""
+        )
         + f'<div class="grid2" style="margin-top:14px;gap:8px;">'
         f'<div style="background:#0d1a0d;border:1px solid var(--border);border-radius:4px;'
         f'padding:10px;text-align:center;">'
@@ -1027,7 +1103,7 @@ def _sec_projects_duration(s: dict) -> str:
         f'padding:10px;text-align:center;">'
         f'<div style="font-size:20px;font-weight:700;color:var(--green2);">{s["dur_median"]}d</div>'
         f'<div style="font-size:10px;color:var(--sub);">mediana (~{s["dur_median"]//30} meses)</div></div>'
-        f'</div></div>'
+        f"</div></div>"
     )
 
     return f'<div class="grid2" style="margin-bottom:24px;">{proj_col}{dur_col}</div>'
@@ -1040,27 +1116,39 @@ def _sec_progressao(s: dict) -> str:
         f'<div class="pt">{label}</div>'
         f'<div class="pn" style="color:{color};">{pg.get(key,0)}</div>'
         f'<div class="ps">{desc}</div>'
-        f'</div>'
+        f"</div>"
         for key, label, color, desc in [
-            ("vol→pago", "Voluntário → Pago", "var(--green)",
-             "iniciaram voluntário, conquistaram bolsa paga"),
-            ("multi-agencia", "Multi-agência", "var(--amber)",
-             "participaram de projetos financiados por 2 ou mais agências distintas (ex: FAPES em um projeto, CNPq em outro)"),
-            ("pago→vol", "Pago → Voluntário", "var(--sub)",
-             "tinham bolsa paga, continuaram sem"),
+            (
+                "vol→pago",
+                "Voluntário → Pago",
+                "var(--green)",
+                "iniciaram voluntário, conquistaram bolsa paga",
+            ),
+            (
+                "multi-agencia",
+                "Multi-agência",
+                "var(--amber)",
+                "participaram de projetos financiados por 2 ou mais agências distintas (ex: FAPES em um projeto, CNPq em outro)",
+            ),
+            (
+                "pago→vol",
+                "Pago → Voluntário",
+                "var(--sub)",
+                "tinham bolsa paga, continuaram sem",
+            ),
         ]
     )
     note = (
         f'<div class="note" style="border-color:var(--green);margin-top:14px;">'
         f'<strong>Voluntário → Pago:</strong> {pg.get("vol→pago",0)} formandos iniciaram '
-        f'a pesquisa sem remuneração (PIVIC voluntário) e, em projetos subsequentes, '
-        f'conquistaram bolsa paga — indicador de progressão na carreira de pesquisa.'
-        f'<br><br>'
+        f"a pesquisa sem remuneração (PIVIC voluntário) e, em projetos subsequentes, "
+        f"conquistaram bolsa paga — indicador de progressão na carreira de pesquisa."
+        f"<br><br>"
         f'<strong>Multi-agência:</strong> {pg.get("multi-agencia",0)} formandos '
-        f'participaram de projetos financiados por agências diferentes ao longo da graduação — '
-        f'por exemplo, uma bolsa FAPES em iniciação científica e outra CNPq em projeto distinto. '
-        f'Isso reflete diversificação de vínculos de pesquisa, não acúmulo simultâneo de bolsas.'
-        f'</div>'
+        f"participaram de projetos financiados por agências diferentes ao longo da graduação — "
+        f"por exemplo, uma bolsa FAPES em iniciação científica e outra CNPq em projeto distinto. "
+        f"Isso reflete diversificação de vínculos de pesquisa, não acúmulo simultâneo de bolsas."
+        f"</div>"
     )
     return section(
         "Progressão de bolsa",
@@ -1075,7 +1163,9 @@ def _sec_orientadores(s: dict) -> str:
     dist_bars = "".join(
         bar(
             f"{k} orientador{'es' if k > 1 else ''}",
-            v, max_sd, "var(--green)" if k == 1 else ("var(--amber)" if k == 2 else "var(--red)"),
+            v,
+            max_sd,
+            "var(--green)" if k == 1 else ("var(--amber)" if k == 2 else "var(--red)"),
             "md",
         )
         for k, v in sorted(sd.items())
@@ -1083,8 +1173,8 @@ def _sec_orientadores(s: dict) -> str:
     multi = sum(v for k, v in sd.items() if k > 1)
     dist_note = (
         f'<div style="margin-top:10px;font-size:11px;color:var(--sub);">'
-        f'{multi} formandos ({round(multi/sum(sd.values())*100) if sd else 0}%) '
-        f'atuaram com múltiplos orientadores.</div>'
+        f"{multi} formandos ({round(multi/sum(sd.values())*100) if sd else 0}%) "
+        f"atuaram com múltiplos orientadores.</div>"
     )
 
     top_rows = "".join(
@@ -1095,11 +1185,11 @@ def _sec_orientadores(s: dict) -> str:
 
     body = (
         f'<div class="grid2">'
-        f'<div>{dist_bars}{dist_note}</div>'
+        f"<div>{dist_bars}{dist_note}</div>"
         f'<div><div style="font-size:11px;color:var(--sub);margin-bottom:8px;'
         f'text-transform:uppercase;letter-spacing:1px;">Top orientadores</div>'
-        f'{top_rows}</div>'
-        f'</div>'
+        f"{top_rows}</div>"
+        f"</div>"
     )
     return section(
         "Orientadores por formando",
@@ -1113,7 +1203,9 @@ def _sec_rg(s: dict) -> str:
     if not rg_top:
         return ""
     max_v = rg_top[0][1] if rg_top else 1
-    rows = "".join(bar(name[:50], count, max_v, "var(--green2)") for name, count in rg_top)
+    rows = "".join(
+        bar(name[:50], count, max_v, "var(--green2)") for name, count in rg_top
+    )
     return section("Grupos de pesquisa", "formandos vinculados a grupos", rows)
 
 
@@ -1122,16 +1214,22 @@ def _sec_ka(s: dict) -> str:
     if not ka:
         return ""
     max_v = ka[0][1] if ka else 1
-    COLORS = {0: "var(--green)", 1: "var(--green)", 2: "var(--green2)",
-              3: "var(--amber)", 4: "var(--amber)", 5: "var(--blue)"}
+    COLORS = {
+        0: "var(--green)",
+        1: "var(--green)",
+        2: "var(--green2)",
+        3: "var(--amber)",
+        4: "var(--amber)",
+        5: "var(--blue)",
+    }
     rows = "".join(
         bar(name[:40], count, max_v, COLORS.get(i, "var(--sub)"))
         for i, (name, count) in enumerate(ka)
     )
     note = (
         '<div class="note">KAs derivadas dos grupos de pesquisa vinculados — '
-        'não dos currículos individuais. Formandos são cadastrados como estudantes '
-        'e não possuem currículo Lattes indexado no SigPesq.</div>'
+        "não dos currículos individuais. Formandos são cadastrados como estudantes "
+        "e não possuem currículo Lattes indexado no SigPesq.</div>"
     )
     return section(
         "Áreas de conhecimento",
@@ -1147,18 +1245,20 @@ def _sec_artigos() -> str:
         f'padding:20px 28px;text-align:center;">'
         f'<div style="font-size:40px;font-weight:700;color:var(--sub);">0</div>'
         f'<div style="font-size:11px;color:var(--sub);">artigos</div>'
-        f'</div>'
+        f"</div>"
         f'<div class="note" style="margin-top:0;">'
-        f'<strong>Por que zero?</strong><br>'
-        f'O campo <code>articles</code> é populado via extração do currículo Lattes — '
-        f'disponível apenas para docentes e pesquisadores com Lattes vinculado. '
-        f'Formandos são cadastrados como estudantes e não têm Lattes indexado no SigPesq. '
-        f'Co-autorias existem mas não são acessíveis sem cruzar DOIs via API externa.<br><br>'
+        f"<strong>Por que zero?</strong><br>"
+        f"O campo <code>articles</code> é populado via extração do currículo Lattes — "
+        f"disponível apenas para docentes e pesquisadores com Lattes vinculado. "
+        f"Formandos são cadastrados como estudantes e não têm Lattes indexado no SigPesq. "
+        f"Co-autorias existem mas não são acessíveis sem cruzar DOIs via API externa.<br><br>"
         f'<span style="color:var(--amber);">→ Para medir produção discente, indexar os '
-        f'Lattes dos estudantes ou cruzar DOIs via API.</span>'
-        f'</div></div>'
+        f"Lattes dos estudantes ou cruzar DOIs via API.</span>"
+        f"</div></div>"
     )
-    return section("Produção científica", "Artigos registrados para formandos no sistema", body)
+    return section(
+        "Produção científica", "Artigos registrados para formandos no sistema", body
+    )
 
 
 def _sec_ic_timing(s: dict) -> str:
@@ -1176,33 +1276,28 @@ def _sec_ic_timing(s: dict) -> str:
 
     # -- KPI cards --
     early = sum(v for k, v in pd.items() if k <= 2)
-    mid   = sum(v for k, v in pd.items() if 3 <= k <= 5)
-    late  = sum(v for k, v in pd.items() if k >= 6)
+    mid = sum(v for k, v in pd.items() if 3 <= k <= 5)
+    late = sum(v for k, v in pd.items() if k >= 6)
 
     kpi_cards = (
         f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">'
-
         f'<div style="background:#0d1a0d;border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--green);">{avg}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">semestres médios<br>até 1ª IC</div>'
-        f'</div>'
-
+        f"</div>"
         f'<div style="background:#0d1a0d;border:1px solid var(--green);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--green);">{early}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">iniciaram cedo<br>(1º–2º semestre)</div>'
-        f'</div>'
-
+        f"</div>"
         f'<div style="background:#0d1a0d;border:1px solid var(--amber);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--amber);">{mid}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">período intermediário<br>(3º–5º semestre)</div>'
-        f'</div>'
-
+        f"</div>"
         f'<div style="background:#0d1a0d;border:1px solid var(--sub);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--sub);">{late}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">iniciaram tarde<br>(6º semestre ou mais)</div>'
-        f'</div>'
-
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )
 
     # -- Period distribution bars --
@@ -1221,9 +1316,9 @@ def _sec_ic_timing(s: dict) -> str:
         f'<span style="font-size:11px;color:var(--text);width:70px;flex-shrink:0;">{k}º semestre</span>'
         f'<div style="flex:1;height:14px;background:#1a2a1a;border-radius:3px;overflow:hidden;">'
         f'<div style="width:{round(v/max_pd*100)}%;height:100%;background:{_period_color(k)};"></div>'
-        f'</div>'
+        f"</div>"
         f'<span style="font-size:11px;font-weight:600;color:{_period_color(k)};width:24px;text-align:right;">{v}</span>'
-        f'</div>'
+        f"</div>"
         for k, v in sorted(pd.items())
     )
 
@@ -1233,36 +1328,33 @@ def _sec_ic_timing(s: dict) -> str:
         f'<span style="font-size:11px;color:var(--text);width:40px;flex-shrink:0;">{yr}</span>'
         f'<div style="flex:1;height:12px;background:#1a2a1a;border-radius:3px;overflow:hidden;">'
         f'<div style="width:{round(v/max_yd*100)}%;height:100%;background:var(--blue);"></div>'
-        f'</div>'
+        f"</div>"
         f'<span style="font-size:11px;color:var(--blue);width:20px;text-align:right;">{v}</span>'
-        f'</div>'
+        f"</div>"
         for yr, v in sorted(yd.items())
     )
 
     charts = (
         f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:16px;">'
-
         f'<div><div style="font-size:11px;color:var(--sub);text-transform:uppercase;'
         f'letter-spacing:.05em;margin-bottom:10px;">Semestre do curso na 1ª IC</div>'
-        f'{period_bars}</div>'
-
+        f"{period_bars}</div>"
         f'<div><div style="font-size:11px;color:var(--sub);text-transform:uppercase;'
         f'letter-spacing:.05em;margin-bottom:10px;">Ano de início (calendário)</div>'
-        f'{year_bars}</div>'
-
-        f'</div>'
+        f"{year_bars}</div>"
+        f"</div>"
     )
 
     note = (
         f'<div class="note" style="margin-top:0;">'
-        f'<strong>Metodologia:</strong> período calculado pela diferença entre semestre de entrada '
-        f'(extraído da matrícula — ex: <code>20181BSI…</code> → 2018/1) e data de início do '
+        f"<strong>Metodologia:</strong> período calculado pela diferença entre semestre de entrada "
+        f"(extraído da matrícula — ex: <code>20181BSI…</code> → 2018/1) e data de início do "
         f'primeiro projeto SigPesq. Base: {n} de {s["with_research"]} formandos com pesquisa '
-        f'e matrícula interpretável. '
+        f"e matrícula interpretável. "
         f'<span style="color:var(--green);">Verde = 1º–2º sem.</span> · '
         f'<span style="color:var(--amber);">Âmbar = 3º–5º sem.</span> · '
         f'<span style="color:var(--sub);">Cinza = 6º sem.+</span>'
-        f'</div>'
+        f"</div>"
     )
 
     return section(
@@ -1331,11 +1423,11 @@ def _sec_lattes_cross(s: dict) -> str:
 
     comparison_table = (
         f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        f'<thead><tr>'
+        f"<thead><tr>"
         f'<th style="text-align:left;padding:8px 4px;border-bottom:1px solid var(--border);">Métrica</th>'
         f'<th style="text-align:right;padding:8px 4px;border-bottom:1px solid var(--border);">Valor</th>'
         f'<th style="text-align:right;padding:8px 4px;border-bottom:1px solid var(--border);">%</th>'
-        f'</tr></thead><tbody>{table_rows}</tbody></table>'
+        f"</tr></thead><tbody>{table_rows}</tbody></table>"
     )
 
     # Distribution bars: SigPesq vs Union
@@ -1361,45 +1453,49 @@ def _sec_lattes_cross(s: dict) -> str:
             f'<div style="display:flex;align-items:center;gap:6px;">'
             f'<div style="width:{un_w}px;height:10px;background:var(--green);border-radius:2px;"></div>'
             f'<span style="font-size:12px;">{un_v}</span></div></td>'
-            f'</tr>'
+            f"</tr>"
         )
 
     dist_table = (
         f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
-        f'<thead><tr>'
+        f"<thead><tr>"
         f'<th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);">Projetos</th>'
         f'<th style="padding:6px 8px;border-bottom:1px solid var(--border);">SigPesq</th>'
         f'<th style="padding:6px 8px;border-bottom:1px solid var(--border);">SigPesq + Lattes</th>'
-        f'</tr></thead><tbody>{dist_rows}</tbody></table>'
+        f"</tr></thead><tbody>{dist_rows}</tbody></table>"
     )
 
     # New formandos discovered via Lattes
     new_list = ""
     if new_names:
         items = "".join(f'<li style="margin:2px 0;">{n}</li>' for n in new_names[:20])
-        suffix = f'<li style="color:var(--sub);">... e mais {len(new_names)-20}</li>' if len(new_names) > 20 else ""
+        suffix = (
+            f'<li style="color:var(--sub);">... e mais {len(new_names)-20}</li>'
+            if len(new_names) > 20
+            else ""
+        )
         new_list = (
             f'<div style="margin-top:20px;">'
             f'<div style="font-size:12px;font-weight:600;color:var(--sub);text-transform:uppercase;'
             f'letter-spacing:.05em;margin-bottom:8px;">Formandos novos via Lattes ({len(new_names)})</div>'
             f'<ul style="margin:0;padding-left:20px;font-size:13px;columns:2;gap:24px;">'
-            f'{items}{suffix}</ul></div>'
+            f"{items}{suffix}</ul></div>"
         )
 
     body = (
         f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;align-items:start;">'
-        f'<div>{comparison_table}</div>'
-        f'<div>{dist_table}</div>'
-        f'</div>'
-        f'{new_list}'
+        f"<div>{comparison_table}</div>"
+        f"<div>{dist_table}</div>"
+        f"</div>"
+        f"{new_list}"
         f'<div class="note" style="margin-top:20px;">'
-        f'<strong>Metodologia:</strong> SigPesq registra bolsas IC/IT com orientador. '
-        f'Lattes captura adicionalmente TCCs (não registrados no SigPesq) e IC informais. '
-        f'IC duplicada entre fontes toma o maior contagem individual (max). '
-        f'TCC é aditivo — SigPesq não rastreia. '
+        f"<strong>Metodologia:</strong> SigPesq registra bolsas IC/IT com orientador. "
+        f"Lattes captura adicionalmente TCCs (não registrados no SigPesq) e IC informais. "
+        f"IC duplicada entre fontes toma o maior contagem individual (max). "
+        f"TCC é aditivo — SigPesq não rastreia. "
         f'Impacto: média sobe de <strong>{avg_sp}</strong> → <strong style="color:{delta_color};">{avg_un}</strong> proj/formando '
         f'(<strong style="color:{delta_color};">+{delta_pct}%</strong>).'
-        f'</div>'
+        f"</div>"
     )
 
     return section(
@@ -1422,52 +1518,48 @@ def _sec_graduation_time(s: dict) -> str:
     n = overall["n"]
     total = s["total"]
     n_transfers = cats.get("transfers", 0)
-    n_regular   = cats.get("regular", 0)
-    n_extended  = cats.get("extended", 0)
+    n_regular = cats.get("regular", 0)
+    n_extended = cats.get("extended", 0)
 
     kpi = (
         f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px;">'
         f'<div style="background:#0d1a0d;border:1px solid var(--green);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--green);">{mean_sem}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">semestres médios<br>({mean_sem / 2:.1f} anos)</div>'
-        f'</div>'
+        f"</div>"
         f'<div style="background:#0d1a0d;border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--green2);">{median_sem}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">mediana<br>({median_sem / 2:.1f} anos)</div>'
-        f'</div>'
+        f"</div>"
         f'<div style="background:#0d1a0d;border:1px solid var(--border);border-radius:8px;padding:14px;text-align:center;">'
         f'<div style="font-size:28px;font-weight:700;color:var(--sub);">{n}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:4px;">formandos<br>com matrícula interpretável</div>'
-        f'</div>'
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )
 
     # Category breakdown row
     cat_row = (
         f'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px;">'
-
         f'<div style="background:#0a160a;border:1px solid var(--blue);border-radius:6px;padding:12px;text-align:center;">'
         f'<div style="font-size:22px;font-weight:700;color:var(--blue);">{n_transfers}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">Ingresso acelerado<br>'
         f'<span style="color:var(--blue);">&lt; 4 semestres</span></div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">provável transferência ou aproveitamento</div>'
-        f'</div>'
-
+        f"</div>"
         f'<div style="background:#0a160a;border:1px solid var(--green);border-radius:6px;padding:12px;text-align:center;">'
         f'<div style="font-size:22px;font-weight:700;color:var(--green);">{n_regular}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">Tempo regular<br>'
         f'<span style="color:var(--green);">4–24 semestres</span></div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">faixa esperada do currículo</div>'
-        f'</div>'
-
+        f"</div>"
         f'<div style="background:#0a160a;border:1px solid var(--amber);border-radius:6px;padding:12px;text-align:center;">'
         f'<div style="font-size:22px;font-weight:700;color:var(--amber);">{n_extended}</div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">Graduação prolongada<br>'
         f'<span style="color:var(--amber);">&gt; 24 semestres</span></div>'
         f'<div style="font-size:10px;color:var(--sub);margin-top:3px;">provável trancamento prolongado</div>'
-        f'</div>'
-
-        f'</div>'
+        f"</div>"
+        f"</div>"
     )
 
     curso_blocks = ""
@@ -1495,30 +1587,32 @@ def _sec_graduation_time(s: dict) -> str:
             f'<span style="font-size:10px;color:{_bar_color(k)};width:50px;flex-shrink:0;">{k} sem</span>'
             f'<div style="flex:1;height:10px;background:#1a2a1a;border-radius:2px;overflow:hidden;">'
             f'<div style="width:{round(v / max_dist * 100)}%;height:100%;background:{_bar_color(k)};"></div>'
-            f'</div>'
+            f"</div>"
             f'<span style="font-size:10px;color:var(--sub);width:20px;text-align:right;">{v}</span>'
-            f'</div>'
+            f"</div>"
             for k, v in sorted(dist.items())
         )
         cat_summary = ""
         if cc.get("transfers"):
             cat_summary += f' · <span style="color:var(--blue);">{cc["transfers"]} acelerado</span>'
         if cc.get("extended"):
-            cat_summary += f' · <span style="color:var(--red);">{cc["extended"]} prolongado</span>'
+            cat_summary += (
+                f' · <span style="color:var(--red);">{cc["extended"]} prolongado</span>'
+            )
         curso_blocks += (
             f'<div style="background:#0f1a0f;border:1px solid var(--border);border-radius:6px;padding:14px;">'
             f'<div style="font-size:12px;font-weight:600;margin-bottom:4px;">{short}</div>'
             f'<div style="font-size:11px;color:var(--sub);margin-bottom:10px;">'
             f'média {cstats["mean"]} sem ({cstats["mean"] / 2:.1f} anos) · '
             f'mediana {cstats["median"]} sem · n={cstats["n"]}'
-            f'{cat_summary}</div>'
-            f'{dist_bars}</div>'
+            f"{cat_summary}</div>"
+            f"{dist_bars}</div>"
         )
 
     # ---- IC vs sem-IC comparison card ----
     icv = gt.get("ic_vs_no_ic", {})
-    ic_stats  = icv.get("ic", {})
-    no_stats  = icv.get("no_ic", {})
+    ic_stats = icv.get("ic", {})
+    no_stats = icv.get("no_ic", {})
     icv_curso = icv.get("by_curso", {})
 
     def _fmt(st: dict, key: str) -> str:
@@ -1540,10 +1634,10 @@ def _sec_graduation_time(s: dict) -> str:
             f'<tr style="border-bottom:1px solid var(--border);">'
             f'<td style="padding:7px 10px;font-size:12px;color:var(--sub);">{label}</td>'
             f'<td style="padding:7px 10px;font-size:13px;font-weight:600;color:var(--green);text-align:center;">'
-            f'{_fmt(ic_st, key)}{_delta_str(iv, nv)}</td>'
+            f"{_fmt(ic_st, key)}{_delta_str(iv, nv)}</td>"
             f'<td style="padding:7px 10px;font-size:13px;color:var(--sub);text-align:center;">'
-            f'{_fmt(no_st, key)}</td>'
-            f'</tr>'
+            f"{_fmt(no_st, key)}</td>"
+            f"</tr>"
         )
 
     def _section_rows(label: str, ic_st: dict, no_st: dict) -> str:
@@ -1551,17 +1645,25 @@ def _sec_graduation_time(s: dict) -> str:
             f'<tr style="background:#0a160a;">'
             f'<td colspan="3" style="padding:6px 10px;font-size:11px;font-weight:700;'
             f'color:var(--text);text-transform:uppercase;letter-spacing:.05em;">{label}</td>'
-            f'</tr>'
+            f"</tr>"
         )
-        return header + _row("Média (sem)", ic_st, no_st, "mean") + _row("Mediana (sem)", ic_st, no_st, "median")
+        return (
+            header
+            + _row("Média (sem)", ic_st, no_st, "mean")
+            + _row("Mediana (sem)", ic_st, no_st, "median")
+        )
 
     table_rows = _section_rows("Geral", ic_stats, no_stats)
     for curso, cv in sorted(icv_curso.items()):
-        short = "ECA — Eng. Controle e Automação" if "Controle" in curso else "SI — Sistemas de Informação"
+        short = (
+            "ECA — Eng. Controle e Automação"
+            if "Controle" in curso
+            else "SI — Sistemas de Informação"
+        )
         table_rows += _section_rows(short, cv.get("ic", {}), cv.get("no_ic", {}))
 
-    ic_n  = ic_stats.get("n", 0)
-    no_n  = no_stats.get("n", 0)
+    ic_n = ic_stats.get("n", 0)
+    no_n = no_stats.get("n", 0)
     ic_table = (
         f'<div style="background:#0a160a;border:1px solid var(--border);border-radius:8px;'
         f'overflow:hidden;margin-bottom:16px;">'
@@ -1572,24 +1674,24 @@ def _sec_graduation_time(s: dict) -> str:
         f'Com IC <span style="font-weight:400;">({ic_n})</span></th>'
         f'<th style="padding:10px;text-align:center;font-size:12px;color:var(--sub);">'
         f'Sem IC <span style="font-weight:400;">({no_n})</span></th>'
-        f'</tr></thead>'
-        f'<tbody>{table_rows}</tbody>'
-        f'</table>'
+        f"</tr></thead>"
+        f"<tbody>{table_rows}</tbody>"
+        f"</table>"
         f'<div style="padding:8px 10px;font-size:10px;color:var(--sub);">'
-        f'Delta (verde) = alunos com IC formam mais rápido que sem IC.'
-        f'</div>'
-        f'</div>'
+        f"Delta (verde) = alunos com IC formam mais rápido que sem IC."
+        f"</div>"
+        f"</div>"
     )
 
     # ---- interpretive insight block ----
     ic_mean = ic_stats.get("mean")
     no_mean = no_stats.get("mean")
-    ic_med  = ic_stats.get("median")
-    no_med  = no_stats.get("median")
+    ic_med = ic_stats.get("median")
+    no_med = no_stats.get("median")
 
     if ic_mean is not None and no_mean is not None:
-        delta_m   = round(ic_mean - no_mean, 1)
-        abs_dm    = abs(delta_m)
+        delta_m = round(ic_mean - no_mean, 1)
+        abs_dm = abs(delta_m)
         negligible_overall = abs_dm < 1.0
 
         # per-course deltas
@@ -1603,23 +1705,33 @@ def _sec_graduation_time(s: dict) -> str:
             no_cmed = no_c.get("median")
             if ic_cm is not None and no_cm is not None:
                 d = round(ic_cm - no_cm, 1)
-                curso_deltas.append({
-                    "short": "ECA" if "Controle" in curso else "SI",
-                    "ic_mean": ic_cm, "no_mean": no_cm,
-                    "ic_med": ic_cmed, "no_med": no_cmed,
-                    "delta": d, "n_ic": ic_c.get("n", 0), "n_no": no_c.get("n", 0),
-                })
+                curso_deltas.append(
+                    {
+                        "short": "ECA" if "Controle" in curso else "SI",
+                        "ic_mean": ic_cm,
+                        "no_mean": no_cm,
+                        "ic_med": ic_cmed,
+                        "no_med": no_cmed,
+                        "delta": d,
+                        "n_ic": ic_c.get("n", 0),
+                        "n_no": no_c.get("n", 0),
+                    }
+                )
 
         # detect masking: any course with |delta| >= 3 AND opposite sign to overall
         masking_courses = [
-            c for c in curso_deltas
-            if abs(c["delta"]) >= 3 and (
-                (negligible_overall) or
-                (delta_m > 0 and c["delta"] < 0) or
-                (delta_m < 0 and c["delta"] > 0)
+            c
+            for c in curso_deltas
+            if abs(c["delta"]) >= 3
+            and (
+                (negligible_overall)
+                or (delta_m > 0 and c["delta"] < 0)
+                or (delta_m < 0 and c["delta"] > 0)
             )
         ]
-        strongest = max(curso_deltas, key=lambda c: abs(c["delta"])) if curso_deltas else None
+        strongest = (
+            max(curso_deltas, key=lambda c: abs(c["delta"])) if curso_deltas else None
+        )
 
         # ---- headline based on overall ----
         if negligible_overall:
@@ -1650,7 +1762,11 @@ def _sec_graduation_time(s: dict) -> str:
         for c in curso_deltas:
             d = c["delta"]
             abs_d = abs(d)
-            d_color = "var(--green)" if d <= -1 else ("var(--amber)" if d >= 1 else "var(--sub)")
+            d_color = (
+                "var(--green)"
+                if d <= -1
+                else ("var(--amber)" if d >= 1 else "var(--sub)")
+            )
             d_anos = abs(d) / 2
             if abs_d < 1:
                 verdict = "sem diferença relevante"
@@ -1659,14 +1775,18 @@ def _sec_graduation_time(s: dict) -> str:
                     f"(delta {'−' if d < 0 else '+'}{abs_d} sem — dentro da margem de variação normal)."
                 )
             elif d < 0:
-                verdict = f"com IC {abs_d} semestres mais rápido ({d_anos:.1f} anos a menos)"
+                verdict = (
+                    f"com IC {abs_d} semestres mais rápido ({d_anos:.1f} anos a menos)"
+                )
                 verdict_detail = (
                     f"Média com IC: <strong>{c['ic_mean']} sem</strong> ({c['ic_mean'] / 2:.1f} anos) · "
                     f"Sem IC: <strong>{c['no_mean']} sem</strong> ({c['no_mean'] / 2:.1f} anos). "
                     f"Mediana: {c['ic_med']} vs {c['no_med']} sem. Base: {c['n_ic']} com IC, {c['n_no']} sem IC."
                 )
             else:
-                verdict = f"com IC {abs_d} semestres mais lento ({d_anos:.1f} anos a mais)"
+                verdict = (
+                    f"com IC {abs_d} semestres mais lento ({d_anos:.1f} anos a mais)"
+                )
                 verdict_detail = (
                     f"Média com IC: <strong>{c['ic_mean']} sem</strong> ({c['ic_mean'] / 2:.1f} anos) · "
                     f"Sem IC: <strong>{c['no_mean']} sem</strong> ({c['no_mean'] / 2:.1f} anos). "
@@ -1677,7 +1797,7 @@ def _sec_graduation_time(s: dict) -> str:
                 f'<div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px;">'
                 f'{c["short"]} — <span style="color:{d_color};">{verdict}</span></div>'
                 f'<p style="font-size:12px;color:var(--sub);line-height:1.6;margin:0;">{verdict_detail}</p>'
-                f'</div>'
+                f"</div>"
             )
 
         # ---- masking warning ----
@@ -1689,11 +1809,11 @@ def _sec_graduation_time(s: dict) -> str:
                 f'<div style="background:#1a1400;border:1px solid var(--amber);border-radius:6px;'
                 f'padding:12px 14px;margin:12px 0;font-size:12px;line-height:1.6;">'
                 f'<strong style="color:var(--amber);">⚠ Efeito de agregação:</strong> '
-                f'a média geral ({delta_m:+} sem) oculta diferenças expressivas por curso. '
-                f'No {names}, o delta chega a '
+                f"a média geral ({delta_m:+} sem) oculta diferenças expressivas por curso. "
+                f"No {names}, o delta chega a "
                 f'<strong style="color:var(--amber);">{s_strongest["delta"]:+} semestres</strong> — '
-                f'o agregado não é representativo de nenhum dos cursos individualmente.'
-                f'</div>'
+                f"o agregado não é representativo de nenhum dos cursos individualmente."
+                f"</div>"
             )
 
         # ---- interpretation ----
@@ -1726,33 +1846,40 @@ def _sec_graduation_time(s: dict) -> str:
             f'<div style="background:#0b1a0b;border:1px solid var(--border);border-left:4px solid {headline_color};'
             f'border-radius:8px;padding:18px 20px;margin-bottom:16px;">'
             f'<div style="font-size:14px;font-weight:700;color:{headline_color};margin-bottom:12px;">'
-            f'{headline}</div>'
+            f"{headline}</div>"
             f'<p style="font-size:13px;color:var(--text);line-height:1.7;margin-bottom:14px;">{overall_text}</p>'
-            f'{masking_block}'
+            f"{masking_block}"
             f'<div style="border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px;">'
             f'<div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Por curso</div>'
-            f'{curso_paras}</div>'
+            f"{curso_paras}</div>"
             f'<div style="border-top:1px solid var(--border);padding-top:12px;">'
             f'<p style="font-size:12px;color:var(--sub);line-height:1.6;margin:0;">'
             f'<strong style="color:var(--text);">Interpretação:</strong> {takeaway}</p>'
-            f'</div>'
-            f'</div>'
+            f"</div>"
+            f"</div>"
         )
     else:
         insight_block = ""
 
     note = (
         f'<div class="note">'
-        f'<strong>Metodologia:</strong> tempo calculado em semestres entre entrada (extraída da matrícula '
-        f'— ex: <code>20181BSI…</code> → 2018/1) e semestre de formatura. '
-        f'Mínimo curricular: SI = 8 semestres, ECA = 10 semestres. '
-        f'Acelerado (&lt;4 sem): provável transferência ou aproveitamento de disciplinas. '
-        f'Prolongado (&gt;24 sem): provável trancamento ou reingresso. '
-        f'Base: {n} de {total} formandos com matrícula interpretável.'
-        f'</div>'
+        f"<strong>Metodologia:</strong> tempo calculado em semestres entre entrada (extraída da matrícula "
+        f"— ex: <code>20181BSI…</code> → 2018/1) e semestre de formatura. "
+        f"Mínimo curricular: SI = 8 semestres, ECA = 10 semestres. "
+        f"Acelerado (&lt;4 sem): provável transferência ou aproveitamento de disciplinas. "
+        f"Prolongado (&gt;24 sem): provável trancamento ou reingresso. "
+        f"Base: {n} de {total} formandos com matrícula interpretável."
+        f"</div>"
     )
 
-    body = kpi + cat_row + ic_table + insight_block + f'<div class="grid2" style="margin-bottom:16px;">{curso_blocks}</div>' + note
+    body = (
+        kpi
+        + cat_row
+        + ic_table
+        + insight_block
+        + f'<div class="grid2" style="margin-bottom:16px;">{curso_blocks}</div>'
+        + note
+    )
     return section(
         "Tempo de formação",
         f"Semestres do ingresso até a colação — geral: média {mean_sem} sem ({mean_sem / 2:.1f} anos) · base: {n} formandos",
@@ -1763,6 +1890,7 @@ def _sec_graduation_time(s: dict) -> str:
 # ---------------------------------------------------------------------------
 # HTML assembly
 # ---------------------------------------------------------------------------
+
 
 def render_html(s: dict, semester: str, generated_at: str) -> str:
     sem_label = semester.replace("_", ".")
@@ -1808,12 +1936,17 @@ def render_html(s: dict, semester: str, generated_at: str) -> str:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--semester", default="2024_1",
-                        choices=list(SEMESTER_FILE_MAP.keys()))
-    parser.add_argument("--out", default=None,
-                        help="Output HTML path (default: data/exports/formandos/)")
+    parser.add_argument(
+        "--semester", default="2024_1", choices=list(SEMESTER_FILE_MAP.keys())
+    )
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Output HTML path (default: data/exports/formandos/)",
+    )
     args = parser.parse_args()
 
     print(f"Loading formandos for {args.semester}...")
@@ -1829,7 +1962,9 @@ def main() -> None:
     print(f"  {len(lattes['ic'])} IC records, {len(lattes['tcc'])} TCC records")
 
     print("Computing statistics...")
-    stats = compute(formandos, adv_projects, rgs, lattes=lattes, grad_semester=args.semester)
+    stats = compute(
+        formandos, adv_projects, rgs, lattes=lattes, grad_semester=args.semester
+    )
 
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     html = render_html(stats, args.semester, now)
