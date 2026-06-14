@@ -19,6 +19,23 @@ load_dotenv()
 
 
 @task
+def download_groups_task() -> dict:
+    """
+    Downloads Research Groups from SigPesq and saves to a dedicated folder.
+    """
+    logger = get_run_logger()
+    from agent_sigpesq.strategies import ResearchGroupsDownloadStrategy
+
+    try:
+        adapter = SigPesqAdapter(download_dir="data/raw/sigpesq/groups")
+        adapter.extract(download_strategies=[ResearchGroupsDownloadStrategy()])
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error downloading Research Groups: {e}")
+        return {"success": False}
+
+
+@task
 def persist_research_groups():
     """
     Finds the latest Research Group Excel file and loads it into the database.
@@ -28,7 +45,11 @@ def persist_research_groups():
     import os
 
     # Find latest file
-    files = glob.glob("data/raw/sigpesq/research_group/*.xlsx")
+    files = glob.glob("data/raw/sigpesq/groups/research_group/*.xlsx")
+    if not files:
+        # Fallback to legacy path for compatibility with single-session downloads
+        files = glob.glob("data/raw/sigpesq/research_group/*.xlsx")
+
     if not files:
         logger.warning("No Research Group Excel files found.")
         return
@@ -59,7 +80,7 @@ def ingest_research_groups_flow() -> None:
     # Import strategies
     from agent_sigpesq.strategies import ResearchGroupsDownloadStrategy
 
-    adapter = SigPesqAdapter()
+    adapter = SigPesqAdapter(download_dir="data/raw/sigpesq/groups")
 
     # 1. Extract Only Groups
     logger.info("Extracting Research Groups...")

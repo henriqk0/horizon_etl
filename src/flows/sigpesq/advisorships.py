@@ -15,6 +15,23 @@ load_dotenv()
 
 
 @task
+def download_advisorships_task() -> dict:
+    """
+    Downloads Advisorships from SigPesq and saves to a dedicated folder.
+    """
+    logger = get_run_logger()
+    from agent_sigpesq.strategies import AdvisorshipsDownloadStrategy
+
+    try:
+        adapter = SigPesqAdapter(download_dir="data/raw/sigpesq/advisorships")
+        adapter.extract(download_strategies=[AdvisorshipsDownloadStrategy()])
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"Error downloading Advisorships: {e}")
+        return {"success": False}
+
+
+@task
 def persist_advisorships():
     """
     Finds the latest Advisorships Excel file and loads it into the database.
@@ -27,8 +44,9 @@ def persist_advisorships():
     # but we follow the pattern in ingest_sigpesq_projects.py
 
     files = glob.glob("data/raw/sigpesq/advisorships/**/*.xlsx", recursive=True)
+
     if not files:
-        # Try generic sigpesq folder if specific one doesn't exist
+        # Fallback to legacy path for compatibility with single-session downloads
         files = glob.glob("data/raw/sigpesq/*.xlsx")
 
     if not files:
@@ -88,7 +106,7 @@ def ingest_advisorships_flow() -> None:
 
     from agent_sigpesq.strategies import AdvisorshipsDownloadStrategy
 
-    adapter = SigPesqAdapter()
+    adapter = SigPesqAdapter(download_dir="data/raw/sigpesq/advisorships")
 
     # 1. Extract Advisorships
     logger.info("Extracting Advisorships...")

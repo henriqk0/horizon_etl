@@ -8,14 +8,20 @@ from prefect import flow, get_run_logger
 
 from src.adapters.sources.sigpesq.adapter import SigPesqAdapter
 from src.flows.sigpesq.advisorships import (
+    download_advisorships_task,
     ingest_advisorships_flow,
     persist_advisorships,
 )
 from src.flows.sigpesq.groups import (
+    download_groups_task,
     ingest_research_groups_flow,
     persist_research_groups,
 )
-from src.flows.sigpesq.projects import ingest_projects_flow, persist_projects
+from src.flows.sigpesq.projects import (
+    download_projects_task,
+    ingest_projects_flow,
+    persist_projects,
+)
 from src.notifications.telegram import telegram_flow_state_handlers
 
 load_dotenv()
@@ -60,6 +66,51 @@ def ingest_sigpesq_flow() -> None:
     logger.info("Flow finished successfully.")
 
 
+@flow(name="Ingest SigPesq Parallel", **telegram_flow_state_handlers())
+def ingest_sigpesq_parallel_flow() -> None:
+    """
+    Prefect flow for ingesting ALL SigPesq data in parallel.
+    Downloads all reports in parallel (separate logins), then persists each dataset sequentially.
+    """
+    logger = get_run_logger()
+    logger.info("Initializing SigPesq Parallel Ingestion Flow")
+
+    # Phase 1: Parallel Downloads (Network I/O)
+    logger.info("Starting parallel downloads...")
+    groups_future = download_groups_task.submit()
+    projects_future = download_projects_task.submit()
+    advisorships_future = download_advisorships_task.submit()
+
+    # Wait for all to finish
+    groups_res = groups_future.result()
+    projects_res = projects_future.result()
+    advisorships_res = advisorships_future.result()
+
+    # Phase 2: Sequential Persistence (DB I/O)
+    logger.info("Starting sequential persistence...")
+
+    if groups_res.get("success"):
+        logger.info("Persisting SigPesq research groups...")
+        persist_research_groups()
+    else:
+        logger.error("Skipping Research Groups persistence due to download failure.")
+
+    if projects_res.get("success"):
+        logger.info("Persisting SigPesq projects...")
+        persist_projects()
+    else:
+        logger.error("Skipping Projects persistence due to download failure.")
+
+    if advisorships_res.get("success"):
+        logger.info("Persisting SigPesq advisorships...")
+        persist_advisorships()
+    else:
+        logger.error("Skipping Advisorships persistence due to download failure.")
+
+    logger.info("Parallel Ingestion Flow finished.")
+
+
+
 if __name__ == "__main__":
     import sys
 
@@ -71,11 +122,13 @@ if __name__ == "__main__":
             ingest_research_groups_flow()
         elif command == "advisorships":
             ingest_advisorships_flow()
+        elif command == "parallel":
+            ingest_sigpesq_parallel_flow()
         else:
             print(f"Unknown command: {command}. Running Full Flow.")
             ingest_sigpesq_flow()
     else:
         print(
-            "Running Full Flow (Default). usage: python ingest_sigpesq.py [projects|groups]"
+            "Running Full Flow (Default). usage: python ingest_sigpesq.py [projects|groups|advisorships|parallel]"
         )
         ingest_sigpesq_flow()
