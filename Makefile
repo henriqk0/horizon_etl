@@ -35,6 +35,7 @@ PREFECT_DB_SERVICE ?= database
 	anonymize-backfill anonymize-check \
 	test test-coverage lint format format-check ci-check \
 	audit-duplicates consolidate-duplicates \
+	benchmark \
 	status clean \
 	docker-up docker-stop docker-build \
 	docker-pipeline docker-weekly-flows docker-full-refresh \
@@ -194,6 +195,16 @@ format-check: ## Check formatting without modifying files
 	@$(PYTHON) -m isort --check src tests
 
 ci-check: format-check lint test ## Run all CI checks
+
+# --- Benchmark ---
+
+benchmark: ## Run pipeline benchmarks (RUNS=3, optional: TARGETS, DB_RESET, CLEAN_CACHE, SEQUENTIAL)
+	@$(PYTHON) scripts/benchmark.py \
+		$(if $(RUNS),-n $(RUNS)) \
+		$(if $(TARGETS),--targets $(TARGETS)) \
+		$(if $(DB_RESET),--db-reset) \
+		$(if $(CLEAN_CACHE),--clean-cache) \
+		$(if $(SEQUENTIAL),--sequential)
 
 # --- Data Quality ---
 
