@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Benchmark Horizon ETL pipelines.
 
-Measures wall-clock time, CPU usage (% of a single core), and peak RSS
-memory across multiple runs.  Optionally runs one sequential (single-thread /
-single-CPU) run and computes speedup = sequential_time / parallel_time.
+Measures wall-clock time, CPU usage (% of a single core), and peak PSS
+memory (Proportional Set Size — no double-counting of shared pages) across
+multiple runs.  Optionally runs one sequential (single-thread / single-CPU)
+run and computes speedup = sequential_time / parallel_time.
 
 Usage:
     python scripts/benchmark.py                              # all, 3 runs each
@@ -50,7 +51,6 @@ SEQUENTIAL_ENV = {
 }
 
 _TIME_LINE_RE = re.compile(r"^BENCH_T\s+([\d.]+)%")
-_PAGE_SIZE = 4096
 
 
 def log(msg):
@@ -86,7 +86,7 @@ def clean_cache():
 
 
 # ---------------------------------------------------------------------------
-# Memory monitoring (peak RSS via /proc)
+# Memory monitoring (peak PSS via /proc — no shared-page double-count)
 # ---------------------------------------------------------------------------
 
 def _walk_pids(root_pid):
@@ -107,19 +107,30 @@ def _walk_pids(root_pid):
     return pids
 
 
-def _read_rss_kb(pid):
-    """Return RSS in KB for *pid*, or 0."""
+def _read_pss_kb(pid):
+    """Return PSS in KB for *pid* (via smaps_rollup), or fall back to RSS.
+
+    PSS (Proportional Set Size) divides shared pages across sharing
+    processes, so summing PSS across the process tree gives the true
+    unique physical memory footprint without double-counting.
+    """
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:
+            for line in f:
+                if line.startswith("Pss:"):
+                    return int(line.split()[1])
+    except (OSError, IOError, IndexError, ValueError):
+        pass
     try:
         with open(f"/proc/{pid}/stat") as f:
             parts = f.read().split()
-        rss_pages = int(parts[23])
-        return rss_pages * _PAGE_SIZE // 1024
+        return int(parts[23]) * 4
     except (OSError, IOError, IndexError, ValueError):
         return 0
 
 
 class MemMonitor:
-    """Periodically polls /proc to track peak RSS of a process tree."""
+    """Periodically polls /proc to track peak PSS of a process tree."""
 
     def __init__(self, root_pid, interval=0.5):
         self.root_pid = root_pid
@@ -143,7 +154,7 @@ class MemMonitor:
             try:
                 total_kb = 0
                 for pid in _walk_pids(self.root_pid):
-                    total_kb += _read_rss_kb(pid)
+                    total_kb += _read_pss_kb(pid)
                 self._samples_mb.append(total_kb / 1024.0)
             except Exception:
                 pass
@@ -155,11 +166,11 @@ class MemMonitor:
 # ---------------------------------------------------------------------------
 
 def run_and_measure(target, sequential=False):
-    """Run a make target and return (elapsed, cpu_percent, peak_rss_mb, rc).
+    """Run a make target and return (elapsed, cpu_percent, peak_mem_mb, rc).
 
     CPU percentage is obtained from the shell ``time`` keyword (zsh), which
     accurately counts CPU time across the entire waited-for process tree.
-    Memory is sampled via ``/proc`` polling.
+    Memory (PSS) is sampled via ``/proc/<pid>/smaps_rollup`` polling.
     """
     env = os.environ.copy()
     cmd_parts = ["make", target]
@@ -305,7 +316,7 @@ def print_summary(parallel_results, sequential_results):
     print(f"\n{'=' * ncols}")
     print("BENCHMARK SUMMARY")
     print(f"{'=' * ncols}")
-    print(f"CPU% = % of a single core  |  Speedup = sequential_time / parallel_time")
+    print(f"CPU% = % of a single core  |  Mem (PSS)  |  Speedup = sequential_time / parallel_time")
     print(f"{'─' * ncols}")
 
     hdr = (f"{'Pipeline':<35} {'Avg (s)':<9} {'CPU%':<7} "
