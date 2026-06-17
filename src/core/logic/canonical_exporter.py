@@ -231,7 +231,11 @@ class CanonicalDataExporter:
             WHERE a.supervisor_id IS NOT NULL
             """
         )
-        return session.execute(legacy_query).fetchall()
+        try:
+            return session.execute(legacy_query).fetchall()
+        except Exception:
+            logger.info("Legacy advisorship query also failed; returning empty result.")
+            return []
 
     @staticmethod
     def _fetch_advisorship_export_rows(session: Any) -> list[Any]:
@@ -318,7 +322,11 @@ class CanonicalDataExporter:
             LEFT JOIN organizations o ON f.sponsor_id = o.id
             """
         )
-        return session.execute(legacy_query).fetchall()
+        try:
+            return session.execute(legacy_query).fetchall()
+        except Exception:
+            logger.info("Legacy advisorship query also failed; returning empty result.")
+            return []
 
     @staticmethod
     def _normalize_person_id(person_id: Any) -> Any:
@@ -1865,15 +1873,40 @@ class CanonicalDataExporter:
             data, output_path, "Initiative Types", entity_type="initiative_type"
         )
 
-    def export_articles(self, output_path: str):
+    def export_articles(self, output_path: str, batch_size: int = 1000):
         """
-        Exports all articles to a JSON file.
+        Exports all articles to a JSON file using batched processing.
 
         Args:
             output_path (str): The destination file path.
+            batch_size (int): Number of records to process per batch.
         """
-        data = self.article_ctrl.get_all()
-        self._export_entities(data, output_path, "Articles", entity_type="article")
+        try:
+            from research_domain.domain.entities.article import Article
+
+            service = self.article_ctrl._service
+            repository = service._repository
+            session = repository._session
+
+            total = session.query(Article).count()
+            logger.info(f"Exporting {total} Articles in batches of {batch_size}...")
+
+            all_data = []
+            for offset in range(0, total, batch_size):
+                batch = (
+                    session.query(Article)
+                    .order_by(Article.id)
+                    .offset(offset)
+                    .limit(batch_size)
+                    .all()
+                )
+                all_data.extend(batch)
+                logger.info(f"Fetched batch: offset={offset}, size={len(batch)}")
+
+            self._export_entities(all_data, output_path, "Articles", entity_type="article")
+        except Exception:
+            logger.info("Articles table not available; exporting empty list.")
+            self._export_entities([], output_path, "Articles", entity_type="article")
 
     def export_researchers_tracking(self, output_path: str):
         data = self._build_tracking_export("researcher")
@@ -2129,19 +2162,21 @@ class CanonicalDataExporter:
         """
         Exports all fellowships to a JSON file.
         """
-        session = self.initiative_ctrl._service._repository._session
-        query = text("SELECT * FROM fellowships")
-        result = session.execute(query).fetchall()
-        data = []
-        for row in result:
-            data.append(
-                {
+        try:
+            session = self.initiative_ctrl._service._repository._session
+            query = text("SELECT * FROM fellowships")
+            result = session.execute(query).fetchall()
+            data = []
+            for row in result:
+                data.append({
                     "id": row.id,
                     "name": row.name,
                     "description": row.description,
-                    "value": row.value,
-                }
-            )
+                    "value": row.value
+                })
+        except Exception:
+            logger.info("Fellowships table not available; exporting empty list.")
+            data = []
 
         self._export_entities(
             data, output_path, "Fellowships", entity_type="fellowship"

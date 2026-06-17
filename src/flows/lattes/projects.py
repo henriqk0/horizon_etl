@@ -73,7 +73,12 @@ def _resolve_sqlalchemy_engine(init_ctrl: InitiativeController) -> Engine:
 
 
 def _ingest_researcher_file(
-    file_path: str, entity_manager: EntityManager, parser: LattesParser
+    file_path: str,
+    entity_manager: EntityManager,
+    parser: LattesParser,
+    all_researchers: List[Researcher],
+    researcher_ctrl: ResearcherController,
+    article_ctrl: ArticleController,
 ):
     try:
         filename = os.path.basename(file_path)
@@ -98,8 +103,6 @@ def _ingest_researcher_file(
             json_name = info.get("nome_completo")
         json_name = personal_info.get("name") or json_name
 
-        researcher_ctrl = ResearcherController()
-        all_researchers = researcher_ctrl.get_all()
         session = None
         try:
             session = researcher_ctrl._service._repository._session
@@ -225,7 +228,7 @@ def _ingest_researcher_file(
         articles.extend(parser.parse_conference_papers(data))
         if articles:
             ingest_articles_task(
-                articles, target_researcher, all_researchers, parser, file_path
+                articles, target_researcher, all_researchers, article_ctrl, researcher_ctrl, parser, file_path
             )
 
         # 4. Handle Academic Education
@@ -246,28 +249,43 @@ def _ingest_researcher_file(
 
 @task(name="Ingest Lattes Researcher Data", cache_policy=NO_CACHE)
 def ingest_researcher_data(
-    file_path: str, entity_manager: EntityManager, parser: LattesParser
+    file_path: str,
+    entity_manager: EntityManager,
+    parser: LattesParser,
+    all_researchers: List[Researcher],
+    researcher_ctrl: ResearcherController,
+    article_ctrl: ArticleController,
 ):
-    _ingest_researcher_file(file_path, entity_manager, parser)
+    _ingest_researcher_file(
+        file_path, entity_manager, parser, all_researchers, researcher_ctrl, article_ctrl
+    )
 
 
 @task(name="Ingest Lattes Researcher File", cache_policy=NO_CACHE)
-def ingest_file_task(file_path: str, entity_manager: EntityManager):
+def ingest_file_task(
+    file_path: str,
+    entity_manager: EntityManager,
+    all_researchers: List[Researcher],
+    researcher_ctrl: ResearcherController,
+    article_ctrl: ArticleController,
+):
     """Compatibility wrapper kept for scripts/tests that still call this symbol."""
     parser = LattesParser()
-    _ingest_researcher_file(file_path, entity_manager, parser)
+    _ingest_researcher_file(
+        file_path, entity_manager, parser, all_researchers, researcher_ctrl, article_ctrl
+    )
 
 
 def ingest_articles_task(
     articles: List[Dict],
     target_researcher: Researcher,
     all_researchers: List[Researcher],
+    article_ctrl: ArticleController,
+    researcher_ctrl: ResearcherController,
     parser: LattesParser,
     source_file: str,
 ):
     logger.info(f"Processing {len(articles)} articles for {target_researcher.name}...")
-    article_ctrl = ArticleController()
-    researcher_ctrl = ResearcherController()
 
     for art in articles:
         try:
@@ -588,31 +606,34 @@ def ingest_lattes_projects_flow():
     if not json_files:
         return
 
-    with tracking_recorder.run_context(
-        source_system="lattes", flow_name="ingest_lattes_projects"
-    ):
-        init_ctrl = InitiativeController()
-        person_ctrl = PersonController()
-        entity_manager = EntityManager(init_ctrl, person_ctrl)
-        parser = LattesParser()
+    init_ctrl = InitiativeController()
+    person_ctrl = PersonController()
+    entity_manager = EntityManager(init_ctrl, person_ctrl)
+    parser = LattesParser()
 
-        engine = _resolve_sqlalchemy_engine(init_ctrl)
+    # Instantiate controllers once before the loop to avoid memory leaks
+    researcher_ctrl = ResearcherController()
+    article_ctrl = ArticleController()
+    all_researchers = researcher_ctrl.get_all()
 
-        try:
-            AcademicEducation.__table__.drop(engine, checkfirst=True)
-            academic_education_knowledge_areas.drop(engine, checkfirst=True)
-            EducationType.__table__.drop(engine, checkfirst=True)
-            Article.__table__.drop(engine, checkfirst=True)
-            article_authors.drop(engine, checkfirst=True)
-        except Exception:
-            pass
+    from eo_lib.domain.base import Base
 
-        Base.metadata.create_all(engine)
+    engine = _resolve_sqlalchemy_engine(init_ctrl)
 
-        for json_file in json_files:
-            ingest_researcher_data(json_file, entity_manager, parser)
-            gc.collect()
+    try:
+        AcademicEducation.__table__.drop(engine, checkfirst=True)
+        academic_education_knowledge_areas.drop(engine, checkfirst=True)
+        EducationType.__table__.drop(engine, checkfirst=True)
+        Article.__table__.drop(engine, checkfirst=True)
+        article_authors.drop(engine, checkfirst=True)
+    except Exception:
+        pass
 
+    Base.metadata.create_all(engine)
 
+    for json_file in json_files:
+        _ingest_researcher_file(json_file, entity_manager, parser, all_researchers, article_ctrl, researcher_ctrl)
+        gc.collect()
+        
 if __name__ == "__main__":
     ingest_lattes_projects_flow()

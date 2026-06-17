@@ -5,6 +5,7 @@ from typing import Optional
 from prefect import flow, get_run_logger
 
 from src.core.logic.etl_flow_reporter import ETLFlowReporter
+from src.core.logic.prefect_runtime import configure_local_prefect_runtime
 from src.flows.all import ingest_all_sources_flow
 from src.flows.exports.canonical_data import export_canonical_data_flow
 from src.flows.exports.initiatives_analytics_mart import (
@@ -18,6 +19,9 @@ from src.notifications.telegram import (
     send_telegram_etl_report_summary,
     telegram_flow_state_handlers,
 )
+
+
+configure_local_prefect_runtime()
 
 
 def load_etl_report(path: Path) -> dict:
@@ -40,7 +44,6 @@ def weekly_pipelines_flow(
         output_dir="data/reports",
         run_name="weekly_pipeline_run",
     )
-    report_json_path = None
 
     try:
         reporter.run_step(
@@ -72,7 +75,11 @@ def weekly_pipelines_flow(
             runner=lambda: export_people_relationship_graph_flow(output_dir=output_dir),
         )
     finally:
-        report_json_path, report_md_path = reporter.write()
+        try:
+            report_json_path, report_md_path = reporter.write()
+        except Exception:
+            logger.exception("Failed to write ETL report")
+            raise
         logger.info(
             "Weekly pipeline report written to %s and %s.",
             report_json_path,
