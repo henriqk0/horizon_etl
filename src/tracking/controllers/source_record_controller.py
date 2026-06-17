@@ -9,7 +9,9 @@ from src.tracking.services import SourceRecordService
 
 class SourceRecordController(GenericController[SourceRecord]):
     def __init__(self, service: Optional[SourceRecordService] = None):
-        super().__init__(service or TrackingServiceFactory.create_source_record_service())
+        super().__init__(
+            service or TrackingServiceFactory.create_source_record_service()
+        )
 
     def create_source_record(
         self,

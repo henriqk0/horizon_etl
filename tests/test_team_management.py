@@ -1,5 +1,3 @@
-import re
-import unicodedata
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,15 +5,18 @@ import pytest
 from src.core.logic.entity_manager import EntityManager
 from src.core.logic.project_loader import ProjectLoader
 
-
 # Mock classes for controllers
+
+
 class MockPerson:
+
     def __init__(self, id, name):
         self.id = id
         self.name = name
 
 
 class MockTeam:
+
     def __init__(self, id, name):
         self.id = id
         self.name = name
@@ -70,7 +71,9 @@ def test_ensure_roles_exist(mock_role_ctrl, mock_pg_client, project_loader):
     mock_pg_client.return_value.get_session.return_value = session
 
     # Force failure in RoleController instance to trigger fallback
-    project_loader.entity_manager.role_controller.get_all.side_effect = Exception("DB Connection Failed")
+    project_loader.entity_manager.role_controller.get_all.side_effect = Exception(
+        "DB Connection Failed"
+    )
 
     # Mock no roles exist in fallback query
     session.query.return_value.filter_by.return_value.first.return_value = None

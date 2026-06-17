@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock
 
 import pandas as pd
-import pytest
 
 from src.core.logic.research_group_loader import ResearchGroupLoader
 from src.core.logic.strategies.sigpesq_excel import (

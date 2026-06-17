@@ -2,7 +2,7 @@ from src.prefect_runtime import bootstrap_local_prefect
 
 bootstrap_local_prefect()
 
-from src.flows.pipelines.unified import full_ingestion_pipeline
+from src.flows.pipelines.unified import full_ingestion_pipeline  # noqa E402
 
 
 def run_pipeline():

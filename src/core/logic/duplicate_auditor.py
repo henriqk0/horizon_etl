@@ -58,7 +58,9 @@ class DuplicateAuditor:
             conn.row_factory = sqlite3.Row
             results = {
                 "persons_by_canonical_name": self._canonical_duplicates(
-                    conn.execute("SELECT id, name, identification_id FROM persons").fetchall()
+                    conn.execute(
+                        "SELECT id, name, identification_id FROM persons"
+                    ).fetchall()
                 ),
                 "teams_by_canonical_name": self._canonical_duplicates(
                     conn.execute("SELECT id, name FROM teams").fetchall()

@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from research_domain.domain.entities.academic_education import AcademicEducation
 
 from src.flows.lattes.projects import ingest_file_task
 

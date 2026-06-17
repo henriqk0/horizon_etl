@@ -52,7 +52,9 @@ class SigPesqCampusStrategy(CampusStrategy):
             target_name = normalize_text(campus_name)
             for campus in all_campuses:
                 c_org = getattr(campus, "organization_id", None)
-                if normalize_text(campus.name) == target_name and (c_org is None or c_org == org_id):
+                if normalize_text(campus.name) == target_name and (
+                    c_org is None or c_org == org_id
+                ):
                     logger.debug(f"Campus found: {campus.name}")
                     return campus.id
         except Exception as e:

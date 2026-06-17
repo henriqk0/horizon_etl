@@ -27,7 +27,10 @@ def generate_null_researchers_collaboration_graph_task(output_dir: str):
     )
 
 
-@flow(name="Export Null-Classification Collaboration Graph Flow", **telegram_flow_state_handlers())
+@flow(
+    name="Export Null-Classification Collaboration Graph Flow",
+    **telegram_flow_state_handlers(),
+)
 def export_null_researchers_collaboration_graph_flow(output_dir: str = "data/exports"):
     if not os.path.isabs(output_dir):
         output_dir = os.path.join(os.getcwd(), output_dir)

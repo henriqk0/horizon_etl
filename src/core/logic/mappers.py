@@ -95,9 +95,9 @@ class SigPesqMapper:
     def map_research_group(raw_data: Dict[str, Any]) -> ResearchGroup:
         try:
             name = raw_data.get("nome_grupo", "Unnamed Group").strip()
-            leader = raw_data.get("lider", "Unknown").strip()
-            area = raw_data.get("area", "General").strip()
-            certified = bool(raw_data.get("certificado", False))
+            leader = raw_data.get("lider", "Unknown").strip()  # noqa: F841
+            area = raw_data.get("area", "General").strip()  # noqa: F841
+            certified = bool(raw_data.get("certificado", False))  # noqa: F841
 
             return ResearchGroup(
                 name=name,
@@ -112,7 +112,7 @@ class SigPesqMapper:
     def map_researcher(raw_data: Dict[str, Any]) -> Researcher:
         try:
             name = raw_data.get("nome", "Unknown").strip()
-            role = raw_data.get(
+            role = raw_data.get(  # noqa: F841
                 "funcao", "Researcher"
             ).strip()  # e.g. Bolsista, Coordenador
 

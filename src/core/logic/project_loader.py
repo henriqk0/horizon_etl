@@ -1,32 +1,26 @@
 from typing import Any, Dict, Optional
-import pandas as pd
-from loguru import logger
-from sqlalchemy import text
 
-from eo_lib import (
-    Initiative,
-    InitiativeController,
-    PersonController,
-    TeamController,
-)
-from research_domain import (
-    CampusController,
-    KnowledgeAreaController,
+import pandas as pd
+from eo_lib import Initiative, InitiativeController, PersonController, TeamController
+from loguru import logger
+from research_domain import (  # CampusController,; KnowledgeAreaController,; Workaround: Import directly from controllers module since not exported in __init__
     ResearchGroupController,
 )
-# Workaround: Import directly from controllers module since not exported in __init__
-from research_domain.controllers.controllers import (
+from research_domain.controllers.controllers import (  # FellowshipController,
     AdvisorshipController,
-    FellowshipController,
 )
 from research_domain.domain.entities import Advisorship
+from sqlalchemy import text
 
+from src.core.logic.entity_manager import EntityManager
+from src.core.logic.initiative_handlers import (
+    AdvisorshipHandler,
+    StandardProjectHandler,
+)
+from src.core.logic.initiative_identity import get_existing_initiative_identity
+from src.core.logic.initiative_linker import InitiativeLinker
 from src.core.logic.person_matcher import PersonMatcher
 from src.core.logic.team_synchronizer import TeamSynchronizer
-from src.core.logic.entity_manager import EntityManager
-from src.core.logic.initiative_identity import get_existing_initiative_identity
-from src.core.logic.initiative_handlers import StandardProjectHandler, AdvisorshipHandler
-from src.core.logic.initiative_linker import InitiativeLinker
 from src.tracking.recorder import tracking_recorder
 
 
@@ -38,32 +32,32 @@ class ProjectLoader:
 
     def __init__(self, mapping_strategy):
         self.mapping_strategy = mapping_strategy
-        
+
         # Controllers
         self.controller = InitiativeController()
         self.person_controller = PersonController()
         self.team_controller = TeamController()
         self.rg_controller = ResearchGroupController()
         self.adv_controller = AdvisorshipController()
-        
+
         # Service/Logic Classes
         self.entity_manager = EntityManager(self.controller, self.person_controller)
         self.person_matcher = PersonMatcher(self.person_controller)
-        
+
         # Initialize Roles and Cache
         roles_cache = self.entity_manager.ensure_roles()
-        
+
         self.team_synchronizer = TeamSynchronizer(self.team_controller, roles_cache)
-        
+
         self.linker = InitiativeLinker(
             initiative_controller=self.controller,
             rg_controller=self.rg_controller,
             team_controller=self.team_controller,
             person_matcher=self.person_matcher,
             team_synchronizer=self.team_synchronizer,
-            entity_manager=self.entity_manager
+            entity_manager=self.entity_manager,
         )
-        
+
         # Handlers registry
         self.handlers = {
             Initiative: StandardProjectHandler(self.controller),
@@ -71,9 +65,11 @@ class ProjectLoader:
                 self.controller, self.person_matcher, self.entity_manager
             ),
         }
-        
+
         # Ensure base environment
-        self.initiative_type = self.entity_manager.ensure_initiative_type("Research Project")
+        self.initiative_type = self.entity_manager.ensure_initiative_type(
+            "Research Project"
+        )
         self.org_id = self.entity_manager.ensure_organization()
 
     def process_file(self, file_path: str) -> None:
@@ -88,8 +84,8 @@ class ProjectLoader:
         except Exception as e:
             logger.error(f"Failed to read Excel file {file_path}: {e}")
             return
-            
-        records = df.to_dict('records')
+
+        records = df.to_dict("records")
         self.process_records(records, source_file=file_path)
 
     def process_records(
@@ -100,7 +96,11 @@ class ProjectLoader:
         """
         logger.info("Fetching existing initiatives for UPSERT...")
         existing_initiatives = self.controller.get_all()
-        existing_by_name = {init.name: init for init in existing_initiatives if getattr(init, "name", None)}
+        existing_by_name = {
+            init.name: init
+            for init in existing_initiatives
+            if getattr(init, "name", None)
+        }
         existing_by_identity = {}
         for init in existing_initiatives:
             identity = get_existing_initiative_identity(init)
@@ -126,7 +126,9 @@ class ProjectLoader:
                 stats["skipped"] += 1
                 self._rollback_session()
 
-        new_persons_count = len(self.person_matcher._persons_cache) - initial_persons_count
+        new_persons_count = (
+            len(self.person_matcher._persons_cache) - initial_persons_count
+        )
         logger.info(
             f"Ingestion complete: {stats['created']} created, {stats['updated']} updated, "
             f"{stats['skipped']} skipped | {stats['teams']} teams, {new_persons_count} new persons"
@@ -138,16 +140,20 @@ class ProjectLoader:
         based on the persisted advisorships in the database.
         This fixes orphans and ensures consistency across all years.
         """
-        logger.info("Recalculating dates and status for all parent projects from Database...")
-        
+        logger.info(
+            "Recalculating dates and status for all parent projects from Database..."
+        )
+
+        from datetime import date, datetime
+
         from sqlalchemy import text
-        from datetime import datetime, date
-        
+
         session = self.controller._service._repository._session
-        
+
         # Aggregate dates for all parents that have advisorships
-        query = text("""
-            SELECT 
+        query = text(
+            """
+            SELECT
                 i.parent_id,
                 MIN(i.start_date) as min_start,
                 MAX(i.end_date) as max_end
@@ -155,88 +161,89 @@ class ProjectLoader:
             JOIN initiatives i ON a.id = i.id
             WHERE i.parent_id IS NOT NULL
             GROUP BY i.parent_id
-        """)
-        
+        """
+        )
+
         results = session.execute(query).fetchall()
-        
+
         processed_count = 0
         updated_count = 0
-        
+
         def ensure_datetime(val):
             if not val:
-                 return None
+                return None
             if isinstance(val, (datetime, date)):
-                 return val
+                return val
             if isinstance(val, str):
-                 try:
-                     # Attempt generic ISO
-                     return datetime.fromisoformat(val)
-                 except ValueError:
-                     pass
-                 try:
-                     # Attempt common SQL format
-                     return datetime.strptime(val, "%Y-%m-%d %H:%M:%S.%f")
-                 except ValueError:
-                     pass
-                 try:
-                     return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
-                 except ValueError:
-                     pass
+                try:
+                    # Attempt generic ISO
+                    return datetime.fromisoformat(val)
+                except ValueError:
+                    pass
+                try:
+                    # Attempt common SQL format
+                    return datetime.strptime(val, "%Y-%m-%d %H:%M:%S.%f")
+                except ValueError:
+                    pass
+                try:
+                    return datetime.strptime(val, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    pass
             return None
-        
+
         for row in results:
             parent_id = row.parent_id
             min_start = ensure_datetime(row.min_start)
             max_end = ensure_datetime(row.max_end)
-            
+
             if not parent_id:
                 continue
-                
+
             processed_count += 1
-            
+
             # Determine status
-            status = "Unknown"
-            new_status = "Active"
+            status = "Unknown"  # noqa: F841
+            new_status = "Active"  # noqa: F841
             if max_end:
-                 # Check if max_end is in the past
-                 # Ensure max_end is comparable (datetime)
-                 target_date = max_end
-                 if hasattr(max_end, 'date'): # datetime object
-                     target_date = max_end
-                 elif isinstance(max_end, str):
-                     try:
-                         target_date = datetime.fromisoformat(max_end)
-                     except:
-                         pass
-                 
-                 if isinstance(target_date, datetime):
-                     if target_date < datetime.now():
-                         new_status = "Concluded"
-                 elif hasattr(target_date, 'year'): # date object
-                     if target_date < datetime.now().date():
-                         new_status = "Concluded"
+                # Check if max_end is in the past
+                # Ensure max_end is comparable (datetime)
+                target_date = max_end
+                if hasattr(max_end, "date"):  # datetime object
+                    target_date = max_end
+                elif isinstance(max_end, str):
+                    try:
+                        target_date = datetime.fromisoformat(max_end)
+                    except Exception:
+                        pass
+
+                if isinstance(target_date, datetime):
+                    if target_date < datetime.now():
+                        new_status = "Concluded"  # noqa: F841
+                elif hasattr(target_date, "year"):  # date object
+                    if target_date < datetime.now().date():
+                        new_status = "Concluded"  # noqa: F841
 
             # Fetch parent initiative to check if update is needed
             parent = self.controller.get_by_id(parent_id)
             if not parent:
                 continue
-                
+
             # Check if any change is needed
             # Note: We need to handle potential None/types mismatch for comparison or just update
             # Since this is a bulk fix operation, we can just update if distinct
-            
+
             needs_update = False
-            
+
             # Non-destructive update for start_date: only if earlier than current
             if min_start and (not parent.start_date or min_start < parent.start_date):
-                 parent.start_date = min_start
-                 needs_update = True
-                 
+                parent.start_date = min_start
+                needs_update = True
+
             # Non-destructive update for end_date: only if later than current
             if max_end and (not parent.end_date or max_end > parent.end_date):
-                 parent.end_date = max_end
-                 needs_update = True
-            
+                parent.end_date = max_end
+                needs_update = True
+
             # Recalculate status based on the RESULTING end_date (if it was "Unknown" or "Active/Concluded")
             if parent.end_date:
                 # Map Concluded/Active based on time
@@ -245,16 +252,18 @@ class ProjectLoader:
                     calculated_status = "Active"
                     if parent.end_date < datetime.now():
                         calculated_status = "Concluded"
-                    
+
                     if parent.status != calculated_status:
                         parent.status = calculated_status
                         needs_update = True
-            
+
             if needs_update:
                 self.controller.update(parent)
                 updated_count += 1
-        
-        logger.info(f"Recalculation complete. Processed {processed_count} parents, updated {updated_count}.")
+
+        logger.info(
+            f"Recalculation complete. Processed {processed_count} parents, updated {updated_count}."
+        )
 
     def _process_row(
         self,
@@ -299,24 +308,26 @@ class ProjectLoader:
                 identity_key=parent_identity,
                 title=parent_title,
             )
-            
+
             if not parent_initiative:
                 # Create parent via Standard Handler
                 logger.info(f"Creating parent Research Project: {parent_title}")
-                
+
                 # Ensure we have the "Research Project" type for the parent
-                res_proj_type = self.entity_manager.ensure_initiative_type("Research Project")
-                
+                res_proj_type = self.entity_manager.ensure_initiative_type(
+                    "Research Project"
+                )
+
                 # Initial creation without dates - will be fixed by recalculate_all_parent_statuses
                 parent_initiative = self.handlers[Initiative].create_or_update(
                     project_data={
                         "title": parent_title,
-                        "status": "Unknown" # Temporary
+                        "status": "Unknown",  # Temporary
                     },
                     existing_initiative=None,
                     initiative_type_name="Research Project",
                     initiative_type_id=res_proj_type.id,
-                    organization_id=self.org_id
+                    organization_id=self.org_id,
                 )
                 self._register_existing_initiative(
                     existing_by_name=existing_by_name,
@@ -324,10 +335,12 @@ class ProjectLoader:
                     initiative=parent_initiative,
                     model_class=Initiative,
                 )
-                parent_identity_resolved = get_existing_initiative_identity(parent_initiative)
+                parent_identity_resolved = get_existing_initiative_identity(
+                    parent_initiative
+                )
                 if parent_identity_resolved:
                     existing_by_identity[parent_identity_resolved] = parent_initiative
-            
+
             parent_id = parent_initiative.id
 
         # 3. UPSERT Initiative
@@ -344,19 +357,21 @@ class ProjectLoader:
             initiative_type_name=self.initiative_type.name,
             initiative_type_id=self.initiative_type.id,
             organization_id=self.org_id,
-            parent_id=parent_id
+            parent_id=parent_id,
         )
 
         if not existing:
             stats["created"] += 1
-            if initiative: 
+            if initiative:
                 self._register_existing_initiative(
                     existing_by_name=existing_by_name,
                     title=title,
                     initiative=initiative,
                     model_class=model_class,
                 )
-                resolved_identity = get_existing_initiative_identity(initiative) or identity_key
+                resolved_identity = (
+                    get_existing_initiative_identity(initiative) or identity_key
+                )
                 if resolved_identity:
                     existing_by_identity[resolved_identity] = initiative
         else:
@@ -368,7 +383,9 @@ class ProjectLoader:
                     initiative=initiative,
                     model_class=model_class,
                 )
-                resolved_identity = get_existing_initiative_identity(initiative) or identity_key
+                resolved_identity = (
+                    get_existing_initiative_identity(initiative) or identity_key
+                )
                 if resolved_identity:
                     existing_by_identity[resolved_identity] = initiative
 
@@ -405,8 +422,16 @@ class ProjectLoader:
                 canonical_entity_type=canonical_entity_type,
                 canonical_entity_id=initiative.id,
                 operation="create" if not existing else "update",
-                changed_fields=[key for key, value in tracked_attrs.items() if value not in (None, [], "")],
-                before={"existing_initiative_id": getattr(existing, "id", None)} if existing else None,
+                changed_fields=[
+                    key
+                    for key, value in tracked_attrs.items()
+                    if value not in (None, [], "")
+                ],
+                before=(
+                    {"existing_initiative_id": getattr(existing, "id", None)}
+                    if existing
+                    else None
+                ),
                 after={"initiative_id": initiative.id, **tracked_attrs},
                 reason=f"{self.mapping_strategy.__class__.__name__} applied",
             )
@@ -425,12 +450,17 @@ class ProjectLoader:
             rg_name = project_data.get("research_group_name")
             if rg_name and isinstance(rg_name, str) and rg_name.strip():
                 self.linker.link_research_group(
-                    initiative, rg_name, project_data, 
-                    project_data.get("campus_name"), self.org_id
+                    initiative,
+                    rg_name,
+                    project_data,
+                    project_data.get("campus_name"),
+                    self.org_id,
                 )
 
             # Knowledge Areas / Keywords
-            self.linker.associate_keyword_knowledge_areas(initiative, project_data, rg_name)
+            self.linker.associate_keyword_knowledge_areas(
+                initiative, project_data, rg_name
+            )
 
     def _resolve_existing_initiative(
         self,
@@ -449,9 +479,50 @@ class ProjectLoader:
         if title:
             candidate = existing_by_name.get(title)
             if self._candidate_matches_model(candidate, model_class):
-                return candidate
+                if not self._has_conflicting_identity(candidate, identity_key):
+                    return candidate
 
-        return self._lookup_existing_by_exact_name(title, model_class)
+        result = self._lookup_existing_by_exact_name(title, model_class)
+        if result is not None and self._has_conflicting_identity(result, identity_key):
+            return None
+        return result
+
+    def _has_conflicting_identity(
+        self, candidate: Optional[Any], new_identity_key: Optional[str]
+    ) -> bool:
+        """
+        Check if a candidate initiative already has an identity from the same source
+        but with a different value than the new identity_key.
+
+        Prevents name-based fallback from merging records that belong to different
+        workplans (e.g., same advisorship title but different CodPT / different student).
+        """
+        if not new_identity_key or candidate is None:
+            return False
+
+        existing_identity = get_existing_initiative_identity(candidate)
+        if not existing_identity:
+            return False
+
+        new_prefix = (
+            new_identity_key.split("|")[0]
+            if "|" in new_identity_key
+            else new_identity_key
+        )
+        existing_prefix = (
+            existing_identity.split("|")[0]
+            if "|" in existing_identity
+            else existing_identity
+        )
+
+        if (
+            new_prefix
+            and new_prefix == existing_prefix
+            and new_identity_key != existing_identity
+        ):
+            return True
+
+        return False
 
     def _candidate_matches_model(self, candidate: Optional[Any], model_class) -> bool:
         if candidate is None:
@@ -521,10 +592,18 @@ class ProjectLoader:
         if current is None or self._candidate_matches_model(current, model_class):
             existing_by_name[title] = initiative
 
+    REJECTED_STATUSES = {"recusado", "reprovado", "negado", "cancelado"}
+
     def _is_approved(self, row_dict: Dict[str, Any]) -> bool:
         parecer = row_dict.get("ParecerDiretoria", "Aprovado")
-        if isinstance(parecer, str) and parecer.strip() and "aprovado" not in parecer.lower():
-            logger.info(f"Skipping project '{row_dict.get('Título', 'Unknown')}' - Not Approved")
+        if (
+            isinstance(parecer, str)
+            and parecer.strip()
+            and parecer.strip().lower() in self.REJECTED_STATUSES
+        ):
+            logger.info(
+                f"Skipping project '{row_dict.get('Título', 'Unknown')}' - {parecer}"
+            )
             return False
         return True
 

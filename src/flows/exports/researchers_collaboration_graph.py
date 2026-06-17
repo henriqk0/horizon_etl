@@ -27,7 +27,9 @@ def generate_researchers_collaboration_graph_task(output_dir: str):
     )
 
 
-@flow(name="Export Researchers Collaboration Graph Flow", **telegram_flow_state_handlers())
+@flow(
+    name="Export Researchers Collaboration Graph Flow", **telegram_flow_state_handlers()
+)
 def export_researchers_collaboration_graph_flow(output_dir: str = "data/exports"):
     if not os.path.isabs(output_dir):
         output_dir = os.path.join(os.getcwd(), output_dir)

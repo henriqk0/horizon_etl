@@ -1,24 +1,19 @@
-import unicodedata
 from typing import Any, Dict, Optional
 
-from eo_lib import (
-    InitiativeController,
-    PersonController,
-    OrganizationController
-)
+from eo_lib import InitiativeController, OrganizationController, PersonController
 from eo_lib.domain import Role
 from eo_lib.infrastructure.database.postgres_client import PostgresClient
 from loguru import logger
 from research_domain.controllers import (
-    UniversityController,
-    EducationTypeController,
     AcademicEducationController,
+    ArticleController,
     CampusController,
+    EducationTypeController,
     KnowledgeAreaController,
     RoleController,
-    ArticleController
+    UniversityController,
 )
-from research_domain.domain.entities.academic_education import EducationType
+
 from src.core.logic.initiative_identity import normalize_text
 
 
@@ -54,7 +49,7 @@ class EntityManager:
         """Ensure an organization exists and return its ID."""
         if not name:
             return None
-        
+
         # If using the default name and short_name is not provided, default it to IFES
         if name == "Instituto Federal do Espírito Santo" and short_name is None:
             short_name = "IFES"
@@ -74,7 +69,8 @@ class EntityManager:
                 )
 
                 if normalize_text(o_name) == target_norm or (
-                    target_short_norm and normalize_text(o_short_name) == target_short_norm
+                    target_short_norm
+                    and normalize_text(o_short_name) == target_short_norm
                 ):
                     return o.id if hasattr(o, "id") else o.get("id")
 
@@ -185,7 +181,9 @@ class EntityManager:
 
         return initiative_type
 
-    def resolve_campus(self, campus_name: Optional[str], org_id: Optional[int]) -> Optional[int]:
+    def resolve_campus(
+        self, campus_name: Optional[str], org_id: Optional[int]
+    ) -> Optional[int]:
         """Resolve a campus name to an ID, creating it if necessary."""
         if not campus_name or not isinstance(campus_name, str):
             campus_name = "Reitoria"
@@ -200,12 +198,12 @@ class EntityManager:
                 c_org = (
                     c.organization_id
                     if hasattr(c, "organization_id")
-                    else c.get("organization_id")
-                    if isinstance(c, dict)
-                    else None
+                    else c.get("organization_id") if isinstance(c, dict) else None
                 )
-                if c_name and normalize_text(c_name) == target_norm and (
-                    org_id is None or c_org is None or c_org == org_id
+                if (
+                    c_name
+                    and normalize_text(c_name) == target_norm
+                    and (org_id is None or c_org is None or c_org == org_id)
                 ):
                     return c.id if hasattr(c, "id") else c.get("id")
 
@@ -269,7 +267,7 @@ class EntityManager:
             # Create
             logger.info(f"Creating Education Type: {name}")
             new_type = self.edu_type_controller.create_education_type(name=name)
-            
+
             # The controller returns the object or a dict depending on implementation
             # In v0.12.7 it returns the object directly
             return new_type.id if hasattr(new_type, "id") else new_type.get("id")

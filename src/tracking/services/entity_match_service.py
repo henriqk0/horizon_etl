@@ -21,9 +21,9 @@ class EntityMatchService(GenericService[EntityMatch]):
             canonical_entity_type=canonical_entity_type,
             canonical_entity_id=canonical_entity_id,
             match_strategy=match_strategy,
-            match_confidence=Decimal(str(match_confidence))
-            if match_confidence is not None
-            else None,
+            match_confidence=(
+                Decimal(str(match_confidence)) if match_confidence is not None else None
+            ),
         )
         self.create(entity_match)
         return entity_match

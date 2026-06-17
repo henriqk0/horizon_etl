@@ -4,8 +4,8 @@ import sys
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from research_domain import ResearcherController, Researcher
-from eo_lib.infrastructure.database.postgres_client import PostgresClient
+from research_domain import Researcher, ResearcherController
+
 
 def seed_researchers():
     list_path = "data/lattes_run/lattes.list"
@@ -16,11 +16,12 @@ def seed_researchers():
     ctrl = ResearcherController()
     # Ensure tables exist for seeding
     from eo_lib.domain.base import Base
+
     # Force creation of tables
-    if hasattr(ctrl, 'client') and ctrl.client.engine:
-         Base.metadata.create_all(ctrl.client.engine)
-         print("Tables created.")
-    
+    if hasattr(ctrl, "client") and ctrl.client.engine:
+        Base.metadata.create_all(ctrl.client.engine)
+        print("Tables created.")
+
     with open(list_path, "r") as f:
         for line in f:
             line = line.strip()
@@ -30,13 +31,20 @@ def seed_researchers():
             if len(parts) >= 2:
                 lattes_id = parts[0].strip()
                 name = parts[1].strip()
-                
+
                 # Check if exists
-                existing = next((r for r in ctrl.get_all() if getattr(r, "brand_id", "") == lattes_id), None)
+                existing = next(
+                    (
+                        r
+                        for r in ctrl.get_all()
+                        if getattr(r, "brand_id", "") == lattes_id
+                    ),
+                    None,
+                )
                 if not existing:
                     # Create
                     print(f"Creating researcher: {name} ({lattes_id})")
-                    new_researcher = Researcher(name=name, brand_id=lattes_id) 
+                    new_researcher = Researcher(name=name, brand_id=lattes_id)
                     # Note: Researcher init might differ in eo_lib/research_domain.
                     # Usually Researcher(name, ...) but brand_id might be set differently or passed validly.
                     # Base Person has brand_id? No, Person doesn't usually.
@@ -53,13 +61,14 @@ def seed_researchers():
                     # However, ingestion flow lines 43: `str(getattr(r, "brand_id", "") or "") == lattes_id`
                     # suggests it expects `brand_id`.
                     # Let's assume kwargs work or Person has it.
-                    
+
                     try:
                         ctrl.create(new_researcher)
                     except Exception as e:
                         print(f"Error creating {name}: {e}")
                 else:
                     print(f"Researcher exists: {name}")
+
 
 if __name__ == "__main__":
     seed_researchers()

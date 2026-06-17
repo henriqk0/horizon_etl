@@ -1,10 +1,9 @@
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from platform import system
 from typing import Callable, Dict, List
 
 from loguru import logger
@@ -26,11 +25,7 @@ class ScriptLattesRuntimeError(RuntimeError):
 
 # from research_domain_lib.repository.researcher_repository import ResearcherRepository
 
-# Mocking repository access for standalone flow execution if needed,
-# but in real scenario this should inject the repo.
-# For now, I'll assume we can get data.
-# Since I cannot easily instantiate the real repository without DB connection in this "one-shot" agent,
-# I'll create a task that *would* fetch from DB, but for now returns mock data or tries to use the repo if available.
+# Mocking repository access for standalone flow execution if needed,  # but in real scenario this should inject the repo.  # For now, I'll assume we can get data.  # Since I cannot easily instantiate the real repository without DB connection in this "one-shot" agent,  # I'll create a task that *would* fetch from DB, but for now returns mock data or tries to use the repo if available.
 
 
 def clean_lattes_json_output(output_dir: str) -> int:
@@ -39,9 +34,11 @@ def clean_lattes_json_output(output_dir: str) -> int:
 
     removed_count = 0
     for json_file in output_path.glob("*.json"):
-        json_file.unlink()
-        removed_count += 1
-
+        try:
+            json_file.unlink()
+            removed_count += 1
+        except PermissionError:
+            logger.warning(f"Could not remove stale JSON file: {json_file}")
     return removed_count
 
 
@@ -81,6 +78,7 @@ def collect_lattes_ids_from_list(list_path: str) -> List[str]:
 def _check_playwright_chromium() -> bool:
     try:
         from playwright.sync_api import sync_playwright
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             browser.close()
@@ -149,9 +147,7 @@ def patch_script_lattes_runtime(chrome_binary: str | None = None) -> None:
     try:
         import scriptLattes.baixaLattes as baixa_lattes
     except ImportError as exc:
-        raise ScriptLattesRuntimeError(
-            "scriptLattes is not installed."
-        ) from exc
+        raise ScriptLattesRuntimeError("scriptLattes is not installed.") from exc
 
     if getattr(baixa_lattes, "_horizon_runtime_patched", False):
         return
@@ -238,10 +234,14 @@ def prefetch_lattes_cache(
             try:
                 _download_lattes_to_cache(lattes_id, str(cache_path), downloader)
             except Exception as exc:
-                logger.warning(f"Failed to download Lattes {lattes_id}, skipping: {exc}")
+                logger.warning(
+                    f"Failed to download Lattes {lattes_id}, skipping: {exc}"
+                )
                 failed_ids.append(lattes_id)
         if failed_ids:
-            logger.warning(f"Skipped {len(failed_ids)} curricula due to download errors: {failed_ids}")
+            logger.warning(
+                f"Skipped {len(failed_ids)} curricula due to download errors: {failed_ids}"
+            )
         return [lid for lid in missing_ids if lid not in failed_ids]
 
     failed_ids = []
@@ -257,11 +257,15 @@ def prefetch_lattes_cache(
             try:
                 future.result()
             except Exception as exc:
-                logger.warning(f"Failed to download Lattes {lattes_id}, skipping: {exc}")
+                logger.warning(
+                    f"Failed to download Lattes {lattes_id}, skipping: {exc}"
+                )
                 failed_ids.append(lattes_id)
 
     if failed_ids:
-        logger.warning(f"Skipped {len(failed_ids)} curricula due to download errors: {failed_ids}")
+        logger.warning(
+            f"Skipped {len(failed_ids)} curricula due to download errors: {failed_ids}"
+        )
 
     return [lid for lid in missing_ids if lid not in failed_ids]
 
@@ -299,7 +303,7 @@ def get_researchers_from_db() -> List[Dict]:
 @task
 def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
     config_gen = LattesConfigGenerator()
-    config_path = os.path.abspath("lattes.config")
+    config_path = os.path.abspath("cache/lattes.config")
     config_gen.generate(config_path, output_dir, list_path, cache_dir=cache_dir)
     return config_path
 
@@ -307,7 +311,7 @@ def generate_config(output_dir: str, list_path: str, cache_dir: str) -> str:
 @task
 def generate_list(researchers: List[Dict]) -> str:
     list_gen = LattesListGenerator()
-    list_path = os.path.abspath("lattes.list")
+    list_path = os.path.abspath("cache/lattes.list")
     list_gen.generate_from_db(list_path, researchers)
     return list_path
 
@@ -336,7 +340,7 @@ def download_lattes_flow():
     output_dir = os.path.join(base_dir, "lattes_json")
     cache_dir = os.path.abspath("cache")
 
-    override_list_path = os.path.abspath("data/lattes_run/lattes.list")
+    override_list_path = os.path.abspath("cache/lattes.list")
 
     if os.path.exists(override_list_path):
         logger.info(f"Using override list file: {override_list_path}")
@@ -370,7 +374,7 @@ def download_lattes_flow():
         cache_path = Path(cache_dir)
         failed_ids = {lid for lid in lattes_ids if not (cache_path / lid).exists()}
         if failed_ids:
-            tmp_list = os.path.abspath("lattes_effective.list")
+            tmp_list = os.path.abspath("cache/lattes_effective.list")
             with open(tmp_list, "w") as f:
                 for line in Path(list_path).read_text().splitlines():
                     match = LATTES_ID_RE.search(line)
@@ -378,7 +382,9 @@ def download_lattes_flow():
                         continue
                     f.write(line + "\n")
             effective_list_path = tmp_list
-            logger.info(f"Excluded {len(failed_ids)} failed IDs from scriptLattes run: {failed_ids}")
+            logger.info(
+                f"Excluded {len(failed_ids)} failed IDs from scriptLattes run: {failed_ids}"
+            )
     else:
         logger.info(f"Lattes cache prefetch disabled by {LATTES_PREFETCH_ENABLED_ENV}.")
 

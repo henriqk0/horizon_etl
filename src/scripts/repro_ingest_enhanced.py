@@ -1,21 +1,19 @@
-import logging
-import os
-import sys
+import os  # noqa E402
+import sys  # noqa E402
 
-from loguru import logger
+from loguru import logger  # noqa E402
 from sqlalchemy import text
 
 # Add project root to path
 sys.path.append(os.getcwd())
 
-from eo_lib import InitiativeController, PersonController, TeamController
+from eo_lib import InitiativeController, PersonController
 from research_domain.controllers.academic_education_controller import (
     AcademicEducationController,
 )
 
 from src.core.logic.entity_manager import EntityManager
 from src.flows.lattes.projects import ingest_file_task
-from src.scripts.init_db import init_db
 
 # Configure logger
 logger.remove()

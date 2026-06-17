@@ -37,7 +37,9 @@ class ExportCampusResolver:
 
         campus_counts: dict[tuple[str, int], Counter[int]] = defaultdict(Counter)
 
-        def add_campus(entity_type: str, entity_id: Any, campus_id: Any, weight: int = 1):
+        def add_campus(
+            entity_type: str, entity_id: Any, campus_id: Any, weight: int = 1
+        ):
             key = self._normalize_key(entity_type, entity_id)
             normalized_campus_id = self._normalize_int(campus_id)
             if key is None or normalized_campus_id is None:
@@ -54,9 +56,14 @@ class ExportCampusResolver:
             SELECT id AS entity_id, campus_id, 1 AS weight
             FROM research_groups
             WHERE campus_id IS NOT NULL
-            """
+            """,
         ):
-            add_campus("research_group", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "research_group",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         for row in self._run_query(
             """
@@ -67,7 +74,12 @@ class ExportCampusResolver:
             GROUP BY it.initiative_id, rg.campus_id
             """
         ):
-            add_campus("initiative", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "initiative",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         for row in self._run_query(
             """
@@ -80,7 +92,12 @@ class ExportCampusResolver:
             GROUP BY a.id, rg.campus_id
             """
         ):
-            add_campus("advisorship", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "advisorship",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         for row in self._run_query(
             """
@@ -91,7 +108,12 @@ class ExportCampusResolver:
             GROUP BY tm.person_id, rg.campus_id
             """
         ):
-            add_campus("researcher", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "researcher",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         for row in self._run_query(
             """
@@ -103,7 +125,12 @@ class ExportCampusResolver:
             GROUP BY aa.article_id, rg.campus_id
             """
         ):
-            add_campus("article", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "article",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         for row in self._run_query(
             """
@@ -114,7 +141,12 @@ class ExportCampusResolver:
             GROUP BY gka.area_id, rg.campus_id
             """
         ):
-            add_campus("knowledge_area", row["entity_id"], row["campus_id"], row["weight"])
+            add_campus(
+                "knowledge_area",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
 
         primary_from_direct = self._build_primary_map(campus_counts)
 
@@ -148,7 +180,9 @@ class ExportCampusResolver:
             FROM source_records
             """
         ):
-            source_record_key = self._normalize_key("source_record", row["source_record_id"])
+            source_record_key = self._normalize_key(
+                "source_record", row["source_record_id"]
+            )
             if source_record_key is None:
                 continue
             campus = primary_with_sources.get(source_record_key)
@@ -178,7 +212,11 @@ class ExportCampusResolver:
             campus_id = self._normalize_int(
                 campus_dict.get("id") if campus_dict else getattr(campus, "id", None)
             )
-            name = campus_dict.get("name") if campus_dict else getattr(campus, "name", None)
+            name = (
+                campus_dict.get("name")
+                if campus_dict
+                else getattr(campus, "name", None)
+            )
             if campus_id is None or not name:
                 continue
             campus_by_id[campus_id] = {"id": campus_id, "name": name}
@@ -236,7 +274,9 @@ class ExportCampusResolver:
         except (TypeError, ValueError):
             return None
 
-    def _normalize_key(self, entity_type: Any, entity_id: Any) -> Optional[tuple[str, int]]:
+    def _normalize_key(
+        self, entity_type: Any, entity_id: Any
+    ) -> Optional[tuple[str, int]]:
         if not entity_type:
             return None
 

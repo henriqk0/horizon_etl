@@ -4,16 +4,16 @@ import glob
 import json
 import os
 import re
-from typing import Any, Dict, List
+from typing import Dict, List
 
 faulthandler.enable()
 
-from eo_lib import InitiativeController, PersonController, TeamController
-from loguru import logger
-from prefect import flow, task
-from prefect.cache_policies import NO_CACHE
-from research_domain.controllers import (
-    AcademicEducationController,
+from eo_lib import InitiativeController, PersonController  # noqa E402
+from eo_lib.domain.base import Base  # noqa E402
+from loguru import logger  # noqa E402
+from prefect import flow, task  # noqa E402
+from prefect.cache_policies import NO_CACHE  # noqa E402
+from research_domain.controllers import (  # noqa E402
     ArticleController,
     ResearcherController,
 )

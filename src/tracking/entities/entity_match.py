@@ -1,8 +1,16 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, Numeric, String, UniqueConstraint
+from eo_lib.domain.base import Base
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from eo_lib.domain.base import Base
 
 
 class EntityMatch(Base):
@@ -14,7 +22,11 @@ class EntityMatch(Base):
             "canonical_entity_id",
             name="uq_entity_matches_source_record_canonical_target",
         ),
-        Index("ix_entity_matches_canonical_target", "canonical_entity_type", "canonical_entity_id"),
+        Index(
+            "ix_entity_matches_canonical_target",
+            "canonical_entity_type",
+            "canonical_entity_id",
+        ),
     )
 
     id = Column(Integer, primary_key=True)

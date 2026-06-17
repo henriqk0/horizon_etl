@@ -1,8 +1,7 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, JSON, String, Text
+from eo_lib.domain.base import Base
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-
-from eo_lib.domain.base import Base
 
 
 class EntityChangeLog(Base):

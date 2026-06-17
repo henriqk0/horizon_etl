@@ -1,13 +1,15 @@
-from typing import List, Optional
+from typing import Optional
 
 from eo_lib.controllers.organization_controller import OrganizationController
 from loguru import logger
-from research_domain import CampusController, ResearchGroup, ResearchGroupController
+from research_domain import CampusController, ResearchGroupController
 
+from src.core.logic.pii_anonymizer import anonymize_email, is_anonymized_email
 from src.core.ports.export_sink import IExportSink
 
 
 class ResearchGroupExporter:
+
     def __init__(self, sink: IExportSink):
         self.sink = sink
         self.rg_ctrl = ResearchGroupController()
@@ -122,7 +124,14 @@ class ResearchGroupExporter:
                             and hasattr(tm.person, "emails")
                             and tm.person.emails
                         ):
-                            email_list = [e.email for e in tm.person.emails]
+                            email_list = [
+                                (
+                                    anonymize_email(e.email)
+                                    if not is_anonymized_email(e.email)
+                                    else e.email
+                                )
+                                for e in tm.person.emails
+                            ]
 
                         role_name = tm.role.name if tm.role else "Member"
 
@@ -150,19 +159,15 @@ class ResearchGroupExporter:
                             seen_members.add(person_id)
 
                         # Check for leader logic (flexible check)
-                        if (
-                            role_name
-                            and "leader" in role_name.lower()
+                        if role_name and (
+                            "leader" in role_name.lower()
                             or "líder" in role_name.lower()
                         ):
-                            # Deduplication logic for leaders
-                            leaders_seen_ids = {l["id"] for l in leaders_list}
-
-                            is_already_leader = False
-                            for l in leaders_list:
-                                if l["id"] == member_obj["id"]:
-                                    is_already_leader = True
-                                    break
+                            # Check if we have already added a leader with the same id
+                            is_already_leader = any(
+                                leader["id"] == member_obj["id"]
+                                for leader in leaders_list
+                            )
 
                             if not is_already_leader:
                                 leaders_list.append(member_obj)

@@ -6,14 +6,15 @@ from typing import Any, Dict, List
 
 from loguru import logger
 
-_SIGPESQ_429_WAIT_SECONDS = int(os.getenv("SIGPESQ_429_WAIT_SECONDS", "60"))
-_SIGPESQ_MAX_RETRIES = int(os.getenv("SIGPESQ_MAX_RETRIES", "3"))
-
 from src.core.logic.loaders import SigPesqFileLoader
 from src.core.ports.source import ISource
 
+_SIGPESQ_429_WAIT_SECONDS = int(os.getenv("SIGPESQ_429_WAIT_SECONDS", "60"))
+_SIGPESQ_MAX_RETRIES = int(os.getenv("SIGPESQ_MAX_RETRIES", "3"))
+
 
 class SigPesqAdapter(ISource):
+
     def __init__(self, download_dir: str = "data/raw/sigpesq"):
         self.download_dir = download_dir
         os.makedirs(self.download_dir, exist_ok=True)
@@ -72,11 +73,16 @@ class SigPesqAdapter(ISource):
         """
         os.makedirs(self.download_dir, exist_ok=True)
         for entry in os.scandir(self.download_dir):
-            if entry.is_dir(follow_symlinks=False):
-                shutil.rmtree(entry.path)
-            else:
-                os.remove(entry.path)
-        logger.info(f"Cleaned SigPesq download directory: {self.download_dir}")
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    shutil.rmtree(entry.path)
+                else:
+                    os.remove(entry.path)
+            except OSError:
+                logger.warning(
+                    "Could not remove stale entry '{}' — continuing (will be overwritten on download).",
+                    entry.path,
+                )
 
     def _trigger_download(self, download_strategies: list = None):
         """
@@ -142,13 +148,16 @@ class SigPesqAdapter(ISource):
         Only apply the simplified launch on macOS.
         """
         import sys
+
         if sys.platform != "darwin":
             return
         try:
             from agent_sigpesq.core import browser_factory as _bf_mod
             from playwright.async_api import Playwright
 
-            async def _safe_create_browser_context(playwright: Playwright, headless: bool = True):
+            async def _safe_create_browser_context(
+                playwright: Playwright, headless: bool = True
+            ):
                 browser = await playwright.chromium.launch(headless=headless)
                 context = await browser.new_context(
                     viewport={"width": 1920, "height": 1080},
@@ -160,7 +169,9 @@ class SigPesqAdapter(ISource):
                 )
                 return context
 
-            _bf_mod.BrowserFactory.create_browser_context = staticmethod(_safe_create_browser_context)
+            _bf_mod.BrowserFactory.create_browser_context = staticmethod(
+                _safe_create_browser_context
+            )
         except Exception as exc:
             logger.warning(f"Could not patch BrowserFactory: {exc}")
 
@@ -173,6 +184,7 @@ class SigPesqAdapter(ISource):
             return
 
         async def login_with_http_429_logging(page):
+
             def log_rate_limit_response(response):
                 if getattr(response, "status", None) != 429:
                     return

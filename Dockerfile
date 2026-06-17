@@ -37,19 +37,45 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /root/.local /root/.local
+# gosu for dropping privileges in entrypoint
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends ca-certificates wget; \
+    rm -rf /var/lib/apt/lists/*; \
+    dpkgArch="$(dpkg --print-architecture)"; \
+    case "$dpkgArch" in \
+        amd64) gosuUrl="https://github.com/tianon/gosu/releases/download/1.17/gosu-amd64" ;; \
+        arm64) gosuUrl="https://github.com/tianon/gosu/releases/download/1.17/gosu-arm64" ;; \
+        *) echo "unsupported arch: $dpkgArch"; exit 1 ;; \
+    esac; \
+    wget -O /usr/local/bin/gosu "$gosuUrl"; \
+    chmod +x /usr/local/bin/gosu; \
+    apt-get purge -y --auto-remove ca-certificates wget
 
-ENV PATH=/root/.local/bin:$PATH \
+COPY --from=builder /root/.local /usr/local
+
+ENV PATH=/usr/local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app \
     CHROME_BINARY=/usr/bin/chromium \
-    CHROMEDRIVER_PATH=/usr/bin/chromedriver
+    CHROMEDRIVER_PATH=/usr/bin/chromedriver \
+    PLAYWRIGHT_BROWSERS_PATH=/usr/local/share/ms-playwright \
+    PREFECT_HOME=/tmp/prefect
 
 COPY . /app
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh
+
+# Create runtime user so gosu sets HOME correctly (gosu 1.17 fallback HomeDir=/)
+RUN echo "appuser:x:1000:1000:App User:/tmp:/usr/sbin/nologin" >> /etc/passwd && \
+    echo "appuser:x:1000:" >> /etc/group
+
+# Runtime user (from user: "${UID:-1000}:${GID:-1000}") needs write access
+RUN chmod 777 /app
 
 # Install Playwright's own Chromium + its system deps
 RUN python -m playwright install --with-deps chromium
 
-ENTRYPOINT ["python"]
+ENTRYPOINT ["/entrypoint.sh", "python"]
 CMD ["src/flows/all.py"]

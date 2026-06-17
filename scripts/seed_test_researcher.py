@@ -1,4 +1,5 @@
-from research_domain import ResearcherController, Researcher
+from research_domain import Researcher, ResearcherController
+
 
 def seed():
     ctrl = ResearcherController()
@@ -6,6 +7,7 @@ def seed():
     r.brand_id = "8400407353673370"
     ctrl.create(r)
     print(f"Created researcher: {r.name} (ID: {r.id})")
+
 
 if __name__ == "__main__":
     seed()

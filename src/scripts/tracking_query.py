@@ -1,8 +1,6 @@
 import argparse
 import json
 import sqlite3
-from pathlib import Path
-
 
 DB_PATH = "db/horizon.db"
 
@@ -18,7 +16,9 @@ def _has_table(conn: sqlite3.Connection, table_name: str) -> bool:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Query tracking data for audit purposes.")
+    parser = argparse.ArgumentParser(
+        description="Query tracking data for audit purposes."
+    )
     parser.add_argument("--db-path", default=DB_PATH)
     parser.add_argument("--entity-type")
     parser.add_argument("--entity-id", type=int)

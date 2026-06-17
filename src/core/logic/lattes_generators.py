@@ -1,5 +1,4 @@
-import os
-from typing import List, Dict
+from typing import Dict, List
 
 
 class LattesConfigGenerator:
@@ -27,8 +26,7 @@ class LattesConfigGenerator:
         if cache_dir:
             cache_line = f"global-diretorio_de_armazenamento_de_cvs = {cache_dir}\n"
 
-        config_content = f"""
-# Arquivo de configuracao gerado automaticamente
+        config_content = f"""  # Arquivo de configuracao gerado automaticamente
 global-nome_do_grupo = Lattes Group
 global-diretorio_de_saida = {output_dir}
 {cache_line}global-email_do_admin = admin@example.com
@@ -41,7 +39,7 @@ global-producao_tecnica-itens = software,patente,desenho-industrial,produto-tecn
 global-producao_artistica-itens = producao
 global-identificacao_dos_grupos_de_pesquisa = SIM
 global-arquivo_de_entrada = {list_path}
-global-arquivo_de_entrada_de_grupos = 
+global-arquivo_de_entrada_de_grupos =
 global-diretorio_de_saida_json = {output_dir}
 """
         with open(config_path, "w") as f:

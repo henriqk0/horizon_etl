@@ -1,4 +1,3 @@
-import json
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -334,10 +333,19 @@ class LattesParser:
             # Try specific keys first, then generic
             student_name = item.get("orientando") or item.get("nome_do_orientado")
 
-            year_str = (
-                item.get("ano_conclusao") or item.get("ano_inicio") or item.get("ano")
+            start_year_str = item.get("ano_inicio")
+            end_year_str = item.get("ano_conclusao") or item.get("ano")
+            start_year = (
+                int(start_year_str)
+                if start_year_str and str(start_year_str).isdigit()
+                else None
             )
-            year = int(year_str) if year_str and str(year_str).isdigit() else None
+            end_year = (
+                int(end_year_str)
+                if end_year_str and str(end_year_str).isdigit()
+                else None
+            )
+            year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")
 
@@ -379,6 +387,8 @@ class LattesParser:
                         "normalized_title": self.normalize_title(title),
                         "student_name": student_name,
                         "year": year,
+                        "start_year": start_year,
+                        "end_year": end_year,
                         "institution": institution,
                         "type": canonical_type,
                         "status": status,
@@ -395,17 +405,6 @@ class LattesParser:
         """
         section = data.get("dados_complementares", {}).get(key, [])
         parsed = []
-
-        # Mapping of Lattes types to Canonical types
-        # This mapping might need refinement based on exact Lattes strings
-        type_map = {
-            "dissertacao_de_mestrado": "Master's Thesis",
-            "tese_de_doutorado": "PhD Thesis",
-            "monografia_de_conclusao_de_curso_aperfeicoamento_e_especializacao": "Specialization",
-            "trabalho_de_conclusao_de_curso_graduacao": "Undergraduate Thesis",
-            "iniciacao_cientifica": "Scientific Initiation",
-            "supervisao_de_pos_doutorado": "Post-Doc Supervision",
-        }
 
         for item in section:
             # Type extraction logic can be complex in Lattes.
@@ -436,11 +435,19 @@ class LattesParser:
             title = item.get("titulo")
             student_name = item.get("orientando") or item.get("nome_do_orientado")
 
-            # Year logic: try 'ano_conclusao', then 'ano_inicio', then 'ano'
-            year_str = (
-                item.get("ano_conclusao") or item.get("ano_inicio") or item.get("ano")
+            start_year_str = item.get("ano_inicio")
+            end_year_str = item.get("ano_conclusao") or item.get("ano")
+            start_year = (
+                int(start_year_str)
+                if start_year_str and str(start_year_str).isdigit()
+                else None
             )
-            year = int(year_str) if year_str and str(year_str).isdigit() else None
+            end_year = (
+                int(end_year_str)
+                if end_year_str and str(end_year_str).isdigit()
+                else None
+            )
+            year = end_year or start_year
 
             institution = item.get("instituicao") or item.get("nome_instituicao")
 
@@ -451,6 +458,8 @@ class LattesParser:
                         "normalized_title": self.normalize_title(title),
                         "student_name": student_name,
                         "year": year,
+                        "start_year": start_year,
+                        "end_year": end_year,
                         "institution": institution,
                         "type": canonical_type,
                         "status": status,

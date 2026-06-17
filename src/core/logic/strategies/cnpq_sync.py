@@ -120,21 +120,24 @@ class CnpqSyncLogic:
         """
         try:
             from sqlalchemy import text
+
             session = self.rg_ctrl._service._repository._session
 
             # 1. Update Name and Description in 'teams' table
             nome_cnpq = self._coerce_text_field(cnpq_data.get("nome_grupo"))
             repercussoes = self._coerce_text_field(cnpq_data.get("repercussoes"))
-            
+
             # Patch: ignore 'CNPq' which is a header branding in some mirrors
             if nome_cnpq and nome_cnpq.upper() == "CNPQ":
                 nome_cnpq = None
 
             # Check and Update Teams table
             if nome_cnpq or repercussoes:
-                check_query = text("SELECT name, description FROM teams WHERE id = :gid")
+                check_query = text(
+                    "SELECT name, description FROM teams WHERE id = :gid"
+                )
                 current = session.execute(check_query, {"gid": group_id}).fetchone()
-                
+
                 if current:
                     curr_name, curr_desc = current[0], current[1]
                     updates = {}
@@ -142,13 +145,17 @@ class CnpqSyncLogic:
                         updates["name"] = nome_cnpq
                     if repercussoes and curr_desc != repercussoes:
                         updates["description"] = repercussoes
-                    
+
                     if updates:
                         before_payload = {"name": curr_name, "description": curr_desc}
-                        logger.info(f"Updating team {group_id} metadata: {list(updates.keys())}")
+                        logger.info(
+                            f"Updating team {group_id} metadata: {list(updates.keys())}"
+                        )
                         set_clause = ", ".join([f"{k} = :{k}" for k in updates])
                         updates["gid"] = group_id
-                        upd_query = text(f"UPDATE teams SET {set_clause} WHERE id = :gid")
+                        upd_query = text(
+                            f"UPDATE teams SET {set_clause} WHERE id = :gid"
+                        )
                         session.execute(upd_query, updates)
                         session.commit()
                         tracking_recorder.record_entity_match(
@@ -185,21 +192,27 @@ class CnpqSyncLogic:
             # 2. Update Start Date in 'research_groups' table
             ident = cnpq_data.get("identificacao", {})
             ano_formacao = ident.get("ano_de_formacao") or ident.get("data_de_formacao")
-            
+
             if ano_formacao:
                 # Handle year only or full date
-                if isinstance(ano_formacao, str) and len(ano_formacao) == 4 and ano_formacao.isdigit():
+                if (
+                    isinstance(ano_formacao, str)
+                    and len(ano_formacao) == 4
+                    and ano_formacao.isdigit()
+                ):
                     start_date = date(int(ano_formacao), 1, 1)
                 else:
                     start_date = self._parse_date(str(ano_formacao))
-                
+
                 if start_date:
                     current_start_date = session.execute(
                         text("SELECT start_date FROM research_groups WHERE id = :gid"),
                         {"gid": group_id},
                     ).scalar()
                     logger.info(f"Updating group {group_id} start_date: {start_date}")
-                    upd_rg = text("UPDATE research_groups SET start_date = :sd WHERE id = :gid")
+                    upd_rg = text(
+                        "UPDATE research_groups SET start_date = :sd WHERE id = :gid"
+                    )
                     session.execute(upd_rg, {"sd": start_date, "gid": group_id})
                     session.commit()
                     tracking_recorder.record_change(
@@ -399,11 +412,13 @@ class CnpqSyncLogic:
                                     )
 
                                     # Use direct SQL update for safety and to avoid ORM complexity with composite keys/relationships
-                                    upd_query = text("""
-                                        UPDATE team_members 
-                                        SET end_date = :end_dt 
+                                    upd_query = text(
+                                        """
+                                        UPDATE team_members
+                                        SET end_date = :end_dt
                                         WHERE team_id = :gid AND person_id = :pid
-                                    """)
+                                    """
+                                    )
                                     session = self.rg_ctrl._service._repository._session
                                     session.execute(
                                         upd_query,
@@ -415,7 +430,9 @@ class CnpqSyncLogic:
                                     )
                                     session.commit()
                                     tracking_recorder.record_change(
-                                        source_record_id=getattr(source_record, "id", None),
+                                        source_record_id=getattr(
+                                            source_record, "id", None
+                                        ),
                                         canonical_entity_type="research_group",
                                         canonical_entity_id=group_id,
                                         operation="update",
@@ -574,7 +591,7 @@ class CnpqSyncLogic:
                     # Safe pattern:
                     try:
                         session.rollback()
-                    except:
+                    except Exception:
                         pass
 
             session.commit()
@@ -620,5 +637,5 @@ class CnpqSyncLogic:
             logger.error(f"Failed to sync knowledge areas for {group_id}: {e}")
             try:
                 self.rg_ctrl._service._repository._session.rollback()
-            except:
+            except Exception:
                 pass

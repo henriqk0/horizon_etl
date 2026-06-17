@@ -1,5 +1,5 @@
-from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 from src.core.logic.canonical_exporter import CanonicalDataExporter
 from src.core.ports.export_sink import IExportSink
@@ -28,18 +28,13 @@ def test_export_all_orchestrates_exports():
             "src.core.logic.canonical_exporter.ResearcherController"
         ) as MockResearcherCtrl,
         patch("src.core.logic.canonical_exporter.PersonController") as MockPersonCtrl,
-        patch(
-            "src.core.logic.canonical_exporter.InitiativeController"
-        ) as MockInitCtrl,
+        patch("src.core.logic.canonical_exporter.InitiativeController") as MockInitCtrl,
         patch("src.core.logic.canonical_exporter.ArticleController") as MockArticleCtrl,
         patch(
             "src.core.logic.canonical_exporter.ResearchGroupController"
         ) as MockRGCtrl,
-        patch(
-            "eo_lib.TeamController"
-        ) as MockTeamCtrl,
+        patch("eo_lib.TeamController") as MockTeamCtrl,
     ):
-
 
         # Mock Instances
         mock_org_instance = MockOrgCtrl.return_value
@@ -71,13 +66,14 @@ def test_export_all_orchestrates_exports():
         mock_researcher_instance.get_all.return_value = [mock_researcher]
         mock_person_instance.get_all.return_value = []
         mock_article_instance.get_all.return_value = []
-        
+
         # Mock Initiative Data
         mock_init = MagicMock()
         mock_init.id = 500
         mock_init.name = "Init1"
         # Need dates for isoformat call
         from datetime import datetime
+
         mock_init.start_date = datetime(2023, 1, 1)
         mock_init.end_date = datetime(2023, 12, 31)
         mock_init.initiative_type_id = 1
@@ -90,11 +86,13 @@ def test_export_all_orchestrates_exports():
             "external_partner": "Partner A",
             "external_research_group": "Group B",
         }
-        
+
         mock_init_instance.get_all.return_value = [mock_init]
-        mock_init_instance.list_initiative_types.return_value = [{"id": 1, "name": "Type1"}]
+        mock_init_instance.list_initiative_types.return_value = [
+            {"id": 1, "name": "Type1"}
+        ]
         mock_init_instance.get_teams.return_value = [{"id": 90}]
-        
+
         # Mock Team
         mock_team_member = MagicMock()
         mock_team_member.person_id = 99
@@ -103,7 +101,7 @@ def test_export_all_orchestrates_exports():
         mock_team_member.start_date = datetime(2023, 1, 1)
         mock_team_member.end_date = None
         mock_team_instance.get_members.return_value = [mock_team_member]
-        
+
         # Mock RG
         mock_rg = MagicMock()
         mock_rg.id = 90
@@ -180,7 +178,9 @@ def test_export_all_orchestrates_exports():
                     "campus": None,
                 }
             ]
-            assert exported_by_path["data/exports/researchers_only_canonical.json"] == []
+            assert (
+                exported_by_path["data/exports/researchers_only_canonical.json"] == []
+            )
             assert exported_by_path["data/exports/students_canonical.json"] == []
             assert exported_by_path["data/exports/outside_ifes_canonical.json"] == []
             assert (
@@ -227,6 +227,7 @@ def test_export_researchers_tracking_builds_parallel_payload():
         exporter = CanonicalDataExporter(sink=mock_sink)
 
     class FakeResult:
+
         def __init__(self, rows):
             self._rows = rows
 
@@ -234,9 +235,13 @@ def test_export_researchers_tracking_builds_parallel_payload():
             return self._rows
 
     class FakeSession:
+
         def execute(self, statement, params=None):
             statement_text = getattr(statement, "text", str(statement))
-            if "FROM entity_matches" in statement_text and "JOIN source_records sr" not in statement_text:
+            if (
+                "FROM entity_matches" in statement_text
+                and "JOIN source_records sr" not in statement_text
+            ):
                 return FakeResult([{"entity_id": 2981}])
             if "FROM entity_matches em" in statement_text:
                 return FakeResult(
@@ -331,6 +336,7 @@ def test_export_tracking_entities_builds_canonical_files():
         exporter = CanonicalDataExporter(sink=mock_sink)
 
     class FakeQuery:
+
         def __init__(self, rows):
             self._rows = rows
 
@@ -341,6 +347,7 @@ def test_export_tracking_entities_builds_canonical_files():
             return self._rows
 
     class FakeSession:
+
         def __init__(self, rows_by_model):
             self._rows_by_model = rows_by_model
 
@@ -419,8 +426,13 @@ def test_export_tracking_entities_builds_canonical_files():
     }
 
     assert len(exported) == 5
-    assert exported["output/ingestion_runs_canonical.json"][0]["source_system"] == "lattes"
-    assert exported["output/source_records_canonical.json"][0]["source_file"] == "00_Paulo.json"
+    assert (
+        exported["output/ingestion_runs_canonical.json"][0]["source_system"] == "lattes"
+    )
+    assert (
+        exported["output/source_records_canonical.json"][0]["source_file"]
+        == "00_Paulo.json"
+    )
     assert (
         exported["output/entity_matches_canonical.json"][0]["canonical_entity_type"]
         == "researcher"
@@ -430,8 +442,7 @@ def test_export_tracking_entities_builds_canonical_files():
         == "resume"
     )
     assert (
-        exported["output/entity_change_logs_canonical.json"][0]["operation"]
-        == "update"
+        exported["output/entity_change_logs_canonical.json"][0]["operation"] == "update"
     )
 
 
@@ -448,6 +459,7 @@ def test_export_advisorships_preserves_person_and_supervisor_fields_from_members
         exporter = CanonicalDataExporter(sink=mock_sink)
 
     class FakeResult:
+
         def __init__(self, rows):
             self._rows = rows
 
@@ -455,6 +467,7 @@ def test_export_advisorships_preserves_person_and_supervisor_fields_from_members
             return self._rows
 
     class FakeSession:
+
         def execute(self, statement, params=None):
             statement_text = getattr(statement, "text", str(statement))
             assert "FROM advisorship_members" in statement_text
@@ -535,6 +548,7 @@ def test_export_advisorships_falls_back_to_legacy_person_and_supervisor_columns(
         exporter = CanonicalDataExporter(sink=mock_sink)
 
     class FakeResult:
+
         def __init__(self, rows):
             self._rows = rows
 
@@ -542,6 +556,7 @@ def test_export_advisorships_falls_back_to_legacy_person_and_supervisor_columns(
             return self._rows
 
     class FakeSession:
+
         def __init__(self):
             self.members_query_attempted = False
 
@@ -595,7 +610,9 @@ def test_export_advisorships_falls_back_to_legacy_person_and_supervisor_columns(
 
 
 def test_fetch_researcher_advisorship_rows_returns_person_id_from_members_query():
+
     class FakeResult:
+
         def __init__(self, rows):
             self._rows = rows
 
@@ -603,6 +620,7 @@ def test_fetch_researcher_advisorship_rows_returns_person_id_from_members_query(
             return self._rows
 
     class FakeSession:
+
         def execute(self, statement, params=None):
             statement_text = getattr(statement, "text", str(statement))
             assert "am_std.student_id AS person_id" in statement_text
@@ -673,16 +691,15 @@ def test_export_researchers_includes_person_id_in_advisorships():
     exporter.export_researchers("output/researchers_canonical.json")
 
     exported_by_path = {
-        call_args[0][1]: call_args[0][0] for call_args in mock_sink.export.call_args_list
+        call_args[0][1]: call_args[0][0]
+        for call_args in mock_sink.export.call_args_list
     }
 
     exported_data = exported_by_path["output/researchers_canonical.json"]
     assert exported_data[0]["advisorships"][0]["person_id"] == 452
     assert exported_data[0]["advisorships"][0]["person_name"] == "Andre Porto"
     assert exported_by_path["output/researchers_only_canonical.json"] == []
-    assert (
-        exported_by_path["output/null_researchers_canonical.json"][0]["id"] == 2981
-    )
+    assert exported_by_path["output/null_researchers_canonical.json"][0]["id"] == 2981
 
 
 def test_export_researchers_backfills_participant_only_people_from_projects_and_advisorships():
@@ -755,7 +772,7 @@ def test_export_researchers_backfills_participant_only_people_from_projects_and_
             {
                 "id": 652,
                 "name": "Wilsiman Santos Evangelista Silva",
-                "identification_id": "wilsiman@example.com",
+                "identification_id": "LGPD-1dade2367ac4722a",
                 "birthday": None,
                 "cnpq_url": None,
                 "google_scholar_url": None,
@@ -816,6 +833,7 @@ def test_export_researchers_backfills_group_only_participants_from_people():
         exporter = CanonicalDataExporter(sink=mock_sink)
 
         class FakeResult:
+
             def __init__(self, rows):
                 self._rows = rows
 
@@ -823,6 +841,7 @@ def test_export_researchers_backfills_group_only_participants_from_people():
                 return self._rows
 
         class FakeSession:
+
             def execute(self, statement, params=None):
                 statement_text = getattr(statement, "text", str(statement))
                 if "SELECT tm.person_id, rg.id, t.name" in statement_text:
@@ -876,9 +895,7 @@ def test_export_researchers_backfills_group_only_participants_from_people():
         ]
         assert exported_data[0]["classification"] == "researcher"
         assert exported_data[0]["classification_confidence"] == "high"
-        assert exported_data[0]["role_evidence"]["research_group_roles"] == [
-            "Leader"
-        ]
+        assert exported_data[0]["role_evidence"]["research_group_roles"] == ["Leader"]
         assert exported_data[0]["cnpq_url"] is None
         assert exported_data[0]["google_scholar_url"] is None
         assert exported_data[0]["resume"] is None
@@ -937,7 +954,10 @@ def test_build_classification_payload_marks_external_classification_for_project_
 
     assert payload["classification"] == "outside_ifes"
     assert payload["classification_confidence"] == "medium"
-    assert payload["classification_note"] == "project_only_staff_without_institutional_signals"
+    assert (
+        payload["classification_note"]
+        == "project_only_staff_without_institutional_signals"
+    )
     assert payload["was_student"] is False
     assert payload["was_staff"] is False
 
@@ -962,7 +982,9 @@ def test_build_classification_payload_marks_student_for_mixed_project_roles_with
 
     assert payload["classification"] == "student"
     assert payload["classification_confidence"] == "medium"
-    assert payload["classification_note"] == "student_signal_overrides_project_staff_role"
+    assert (
+        payload["classification_note"] == "student_signal_overrides_project_staff_role"
+    )
     assert payload["was_student"] is True
     assert payload["was_staff"] is False
 

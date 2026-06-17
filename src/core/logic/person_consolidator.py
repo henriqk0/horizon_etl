@@ -1,6 +1,6 @@
 import sqlite3
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from loguru import logger
 
@@ -182,15 +182,27 @@ class PersonConsolidator:
                 if self._table_exists(conn, "advisorship_members"):
                     self._merge_advisorship_members(conn, winner_id, loser_id)
                 else:
-                    self._update_fk_column(conn, "advisorships", "supervisor_id", winner_id, loser_id)
-                    self._update_fk_column(conn, "advisorships", "student_id", winner_id, loser_id)
-                self._update_fk_column(conn, "academic_educations", "researcher_id", winner_id, loser_id)
-                self._update_fk_column(conn, "academic_educations", "advisor_id", winner_id, loser_id)
-                self._update_fk_column(conn, "academic_educations", "co_advisor_id", winner_id, loser_id)
+                    self._update_fk_column(
+                        conn, "advisorships", "supervisor_id", winner_id, loser_id
+                    )
+                    self._update_fk_column(
+                        conn, "advisorships", "student_id", winner_id, loser_id
+                    )
+                self._update_fk_column(
+                    conn, "academic_educations", "researcher_id", winner_id, loser_id
+                )
+                self._update_fk_column(
+                    conn, "academic_educations", "advisor_id", winner_id, loser_id
+                )
+                self._update_fk_column(
+                    conn, "academic_educations", "co_advisor_id", winner_id, loser_id
+                )
                 conn.execute("DELETE FROM researchers WHERE id = ?", (loser_id,))
                 conn.execute("DELETE FROM persons WHERE id = ?", (loser_id,))
 
-    def _merge_person_record(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
+    def _merge_person_record(
+        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
+    ) -> None:
         winner = conn.execute(
             "SELECT identification_id, birthday FROM persons WHERE id = ?",
             (winner_id,),
@@ -219,7 +231,9 @@ class PersonConsolidator:
                 (loser["birthday"], winner_id),
             )
 
-    def _merge_researcher_record(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
+    def _merge_researcher_record(
+        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
+    ) -> None:
         winner_exists = conn.execute(
             "SELECT 1 FROM researchers WHERE id = ?",
             (winner_id,),
@@ -264,7 +278,9 @@ class PersonConsolidator:
             (loser_id, loser_id, loser_id, loser_id, winner_id),
         )
 
-    def _merge_person_emails(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
+    def _merge_person_emails(
+        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
+    ) -> None:
         emails = conn.execute(
             "SELECT id, email FROM person_emails WHERE person_id = ?",
             (loser_id,),
@@ -341,7 +357,9 @@ class PersonConsolidator:
 
         conn.execute(f"DELETE FROM {table} WHERE {target_column} = ?", (loser_id,))
 
-    def _merge_team_members(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
+    def _merge_team_members(
+        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
+    ) -> None:
         rows = conn.execute(
             """
             SELECT id, team_id, role_id, start_date, end_date

@@ -2,7 +2,6 @@ import json
 import sqlite3
 from pathlib import Path
 
-
 DB_PATH = "db/horizon.db"
 JSON_OUTPUT = "data/reports/tracking_audit_report.json"
 MD_OUTPUT = "data/reports/tracking_audit_report.md"
@@ -111,7 +110,9 @@ def _table(rows: list[dict]) -> str:
         "| " + " | ".join("---" for _ in headers) + " |",
     ]
     for row in rows:
-        lines.append("| " + " | ".join(str(row.get(header, "")) for header in headers) + " |")
+        lines.append(
+            "| " + " | ".join(str(row.get(header, "")) for header in headers) + " |"
+        )
     return "\n".join(lines)
 
 

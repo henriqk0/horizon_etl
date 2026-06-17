@@ -137,8 +137,16 @@ sync-cnpq: prefect-server ## Sync CNPq research groups (CAMPUS=Serra)
 
 # --- Exports ---
 
-export-canonical: prefect-server ## Export all canonical data to OUTPUT_DIR
+export-canonical: prefect-server ## Export all canonical data to a timestamped ZIP (no loose JSON files)
 	@$(FLOW_PYTHON) app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
+	@cd "$(OUTPUT_DIR)" && \
+	ts=$$(date +%Y%m%d_%H%M%S) && \
+	archive="canonical_export_$${ts}.zip" && \
+	json_files=$$(find . -name '*.json' -type f) && \
+	echo "$$json_files" | zip -@ "$$archive" && \
+	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
+	find . -type d -empty -delete 2>/dev/null; \
+	echo "Created: $(OUTPUT_DIR)/$$archive"
 
 export-knowledge-areas-mart: prefect-server ## Export knowledge areas mart JSON
 	@$(FLOW_PYTHON) app.py ka_mart "$(OUTPUT_DIR)/knowledge_areas_mart.json" "$(CAMPUS)"
@@ -250,7 +258,7 @@ docker-weekly-flows: docker-up ## Run weekly flows in Docker
 docker-db-reset: ## Reset the ETL database inside Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app db/create_db.py
 
-docker-full-refresh: docker-db-reset docker-up ## Reset DB and run all sources in Docker
+docker-full-refresh: docker-up docker-db-reset ## Reset DB and run all sources in Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app
 
 docker-ingest-sigpesq: docker-up ## Ingest SigPesq in Docker
@@ -259,8 +267,16 @@ docker-ingest-sigpesq: docker-up ## Ingest SigPesq in Docker
 docker-sync-cnpq: docker-up ## Sync CNPq groups in Docker (CAMPUS=Serra)
 	@$(DOCKER_COMPOSE) run --rm --no-deps app app.py cnpq_sync "$(CAMPUS)"
 
-docker-export-canonical: docker-up ## Export canonical data in Docker
+docker-export-canonical: docker-up ## Export canonical data to a timestamped ZIP in Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
+	@cd "$(OUTPUT_DIR)" && \
+	ts=$$(date +%Y%m%d_%H%M%S) && \
+	archive="canonical_export_$${ts}.zip" && \
+	json_files=$$(find . -name '*.json' -type f) && \
+	echo "$$json_files" | zip -@ "$$archive" && \
+	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
+	find . -type d -empty -delete 2>/dev/null; \
+	echo "Created: $(OUTPUT_DIR)/$$archive"
 
 # --- Utilities ---
 
@@ -268,7 +284,7 @@ status: ## Show database and export status
 	@echo "Database:"
 	@ls -lh db/horizon.db 2>/dev/null || echo "  not initialized"
 	@echo "Exports:"
-	@ls -lh $(OUTPUT_DIR)/*.json 2>/dev/null | wc -l | xargs -I {} echo "  {} files exported"
+	@ls -lh $(OUTPUT_DIR)/canonical_export_*.zip 2>/dev/null | wc -l | xargs -I {} echo "  {} canonical export(s)"
 	@echo "Last pipeline log:"
 	@ls -lt logs/pipeline_*.log 2>/dev/null | head -1 || echo "  no logs found"
 

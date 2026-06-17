@@ -1,7 +1,5 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.core.logic.research_group_exporter import ResearchGroupExporter
 from src.core.ports.export_sink import IExportSink
 
@@ -119,7 +117,7 @@ def test_exporter_fetches_and_exports_enriched_data():
                         "name": "Alice",
                         "role": "Researcher",
                         "lattes_url": "http://lattes/alice",
-                        "emails": ["alice@example.com"],
+                        "emails": ["509c2e454964@anon.lgpd"],
                         "start_date": "2026-01-01",
                         "end_date": "2026-12-31",
                     },
@@ -128,7 +126,7 @@ def test_exporter_fetches_and_exports_enriched_data():
                         "name": "Bob",
                         "role": "Líder",
                         "lattes_url": "http://lattes/bob",
-                        "emails": ["bob@example.com"],
+                        "emails": ["b7b6464fc16c@anon.lgpd"],
                         "start_date": "2026-01-01",
                         "end_date": "2026-12-31",
                     },
@@ -139,7 +137,7 @@ def test_exporter_fetches_and_exports_enriched_data():
                         "name": "Bob",
                         "role": "Líder",
                         "lattes_url": "http://lattes/bob",
-                        "emails": ["bob@example.com"],
+                        "emails": ["b7b6464fc16c@anon.lgpd"],
                         "start_date": "2026-01-01",
                         "end_date": "2026-12-31",
                     }

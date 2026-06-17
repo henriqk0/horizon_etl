@@ -78,14 +78,17 @@ class ProjectMappingStrategy(ABC):
     def _parse_names(self, names_str: Any) -> List[str]:
         """Separates names by semicolon and cleans whitespace."""
         import pandas as pd
+
         if not names_str or pd.isna(names_str):
             return []
         return [name.strip() for name in str(names_str).split(";") if name.strip()]
 
     def _parse_date(self, date_val: Any) -> Optional[datetime]:
         """Parses a date from various string formats or datetime objects."""
-        import pandas as pd
         from datetime import datetime
+
+        import pandas as pd
+
         if pd.isna(date_val) or not date_val:
             return None
 
@@ -102,15 +105,37 @@ class ProjectMappingStrategy(ABC):
                 continue
 
         from loguru import logger
+
         logger.warning(f"Could not parse date: {str_val}")
         return None
 
     @staticmethod
     def parse_currency(value_str: Any) -> float:
-        """Converts Portuguese currency strings (comma-to-dot) to float."""
-        if not value_str or (hasattr(value_str, 'isna') and value_str.isna()):
+        """Converts Portuguese currency strings to float.
+
+        Handles formats:
+          "1.500,00" -> 1500.0  (Brazilian thousand/decimal separators)
+          "R$ 400,00" -> 400.0  (with currency prefix)
+          "400,00"    -> 400.0  (comma as decimal)
+          400.0       -> 400.0  (raw numeric)
+        """
+        if value_str is None:
+            return 0.0
+        if isinstance(value_str, (int, float)):
+            return float(value_str)
+        if hasattr(value_str, "isna") and value_str.isna():
+            return 0.0
+        s = str(value_str).strip().replace("R$", "").strip()
+        if not s:
             return 0.0
         try:
-            return float(str(value_str).replace(",", "."))
+            if "," in s and "." in s:
+                if s.rfind(",") > s.rfind("."):
+                    s = s.replace(".", "").replace(",", ".")
+                else:
+                    s = s.replace(",", "")
+            elif "," in s:
+                s = s.replace(",", ".")
+            return float(s)
         except (ValueError, TypeError):
             return 0.0

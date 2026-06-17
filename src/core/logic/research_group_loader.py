@@ -8,6 +8,7 @@ from research_domain import (
     RoleController,
     UniversityController,
 )
+
 from src.core.logic.initiative_identity import normalize_text
 from src.core.logic.pii_anonymizer import anonymize_person_data
 from src.tracking.recorder import tracking_recorder
@@ -23,6 +24,7 @@ from .strategies.base import (
 
 
 class ResearchGroupLoader:
+
     def __init__(
         self,
         mapping_strategy: ResearchGroupMappingStrategy,
@@ -82,7 +84,7 @@ class ResearchGroupLoader:
             ):
                 controller._service._repository._session.rollback()
                 logger.debug("Session rolled back successfully.")
-        except:
+        except Exception:
             pass
 
     def ensure_leader_role(self):
@@ -251,7 +253,13 @@ class ResearchGroupLoader:
                             canonical_entity_type="research_group",
                             canonical_entity_id=group.id,
                             operation="create",
-                            changed_fields=["name", "short_name", "campus_name", "site_url", "area_name"],
+                            changed_fields=[
+                                "name",
+                                "short_name",
+                                "campus_name",
+                                "site_url",
+                                "area_name",
+                            ],
                             after={
                                 "name": name,
                                 "short_name": sigla if pd.notna(sigla) else None,
@@ -281,7 +289,7 @@ class ResearchGroupLoader:
                     try:
                         members = self.rg_ctrl._service.get_members(group.id)
                         existing_member_ids = [m.person_id for m in members]
-                    except:
+                    except Exception:
                         pass
 
                     for l_name, l_email in leaders_data:

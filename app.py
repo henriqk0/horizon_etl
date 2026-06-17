@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 from loguru import logger
 
+from src.core.logic.pii_session_hook import install_lgpd_session_hooks
 from src.flows.all import ingest_all_sources_flow
 from src.flows.cnpq.groups import sync_cnpq_groups_flow
 from src.flows.exports.canonical_data import export_canonical_data_flow
@@ -11,33 +12,32 @@ from src.flows.exports.initiatives_analytics_mart import (
     export_initiatives_analytics_mart_flow,
 )
 from src.flows.exports.knowledge_areas_mart import export_knowledge_areas_mart_flow
-from src.flows.exports.people_relationship_graph import (
-    export_people_relationship_graph_flow,
-)
-from src.flows.exports.people_collaboration_graph import (
-    export_people_collaboration_graph_flow,
-)
 from src.flows.exports.null_researchers_collaboration_graph import (
     export_null_researchers_collaboration_graph_flow,
-)
-from src.flows.exports.research_group_membership_graphs_manifest import (
-    export_research_group_membership_graphs_manifest_flow,
-)
-from src.flows.exports.students_collaboration_graph import (
-    export_students_collaboration_graph_flow,
 )
 from src.flows.exports.outside_ifes_collaboration_graph import (
     export_outside_ifes_collaboration_graph_flow,
 )
+from src.flows.exports.people_collaboration_graph import (
+    export_people_collaboration_graph_flow,
+)
+from src.flows.exports.people_relationship_graph import (
+    export_people_relationship_graph_flow,
+)
+from src.flows.exports.research_group_membership_graphs_manifest import (
+    export_research_group_membership_graphs_manifest_flow,
+)
 from src.flows.exports.researchers_collaboration_graph import (
     export_researchers_collaboration_graph_flow,
+)
+from src.flows.exports.students_collaboration_graph import (
+    export_students_collaboration_graph_flow,
 )
 from src.flows.lattes.complete_projects import lattes_complete_flow
 from src.flows.lattes.projects import ingest_lattes_projects_flow
 from src.flows.pipelines.unified import full_ingestion_pipeline
 from src.flows.pipelines.weekly import weekly_pipelines_flow
 from src.flows.sigpesq.all import ingest_sigpesq_flow
-from src.core.logic.pii_session_hook import install_lgpd_session_hooks
 
 load_dotenv()
 
@@ -175,7 +175,8 @@ def main():
         if flow_to_run in ["null_researchers_collaboration_graph", "all"]:
             output_dir = (
                 sys.argv[2]
-                if len(sys.argv) > 2 and flow_to_run == "null_researchers_collaboration_graph"
+                if len(sys.argv) > 2
+                and flow_to_run == "null_researchers_collaboration_graph"
                 else "data/exports"
             )
             logger.info(
@@ -186,7 +187,8 @@ def main():
         if flow_to_run in ["outside_ifes_collaboration_graph", "all"]:
             output_dir = (
                 sys.argv[2]
-                if len(sys.argv) > 2 and flow_to_run == "outside_ifes_collaboration_graph"
+                if len(sys.argv) > 2
+                and flow_to_run == "outside_ifes_collaboration_graph"
                 else "data/exports"
             )
             logger.info(
@@ -197,7 +199,8 @@ def main():
         if flow_to_run in ["researchers_collaboration_graph", "all"]:
             output_dir = (
                 sys.argv[2]
-                if len(sys.argv) > 2 and flow_to_run == "researchers_collaboration_graph"
+                if len(sys.argv) > 2
+                and flow_to_run == "researchers_collaboration_graph"
                 else "data/exports"
             )
             logger.info(
@@ -226,6 +229,7 @@ def main():
 
         elif flow_to_run == "anonymize_backfill":
             from src.flows.maintenance.anonymize_backfill import anonymize_backfill_flow
+
             logger.info("Executing Flow: LGPD PII Anonymize Backfill")
             anonymize_backfill_flow()
 

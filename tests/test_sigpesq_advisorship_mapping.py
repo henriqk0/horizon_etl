@@ -72,7 +72,9 @@ def test_person_matcher_email_matching():
     # 3. Create new person when no match
     p2 = MagicMock(spec=Person)
     person_ctrl.create_person.return_value = p2
-    new_person = matcher.match_or_create("Jane Doe", email="jane@example.com")
+    new_person = matcher.match_or_create(
+        "Jane Doe", email="jane@example.com"
+    )  # noqa: F841
     # Should create new person with email
     person_ctrl.create_person.assert_called_once_with(
         name="Jane Doe", emails=["jane@example.com"]

@@ -11,7 +11,6 @@ from src.core.logic.duplicate_auditor import DuplicateAuditor
 from src.core.logic.initiative_identity import normalize_text
 from src.research_domain_compat import AdvisorshipRole
 
-
 DB_PATH = "db/horizon.db"
 LATTES_DIR = "data/lattes_json"
 SIGPESQ_DIR = "data/raw/sigpesq"
@@ -71,7 +70,11 @@ def _project_keys(parser: LattesParser, data: dict[str, Any]) -> set[str]:
     projects.extend(parser.parse_research_projects(data))
     projects.extend(parser.parse_extension_projects(data))
     projects.extend(parser.parse_development_projects(data))
-    return {normalize_text(project.get("name")) for project in projects if project.get("name")}
+    return {
+        normalize_text(project.get("name"))
+        for project in projects
+        if project.get("name")
+    }
 
 
 def _article_key(parser: LattesParser, article: dict[str, Any]) -> str:
@@ -85,7 +88,9 @@ def _article_keys(parser: LattesParser, data: dict[str, Any]) -> set[str]:
     articles = []
     articles.extend(parser.parse_articles(data))
     articles.extend(parser.parse_conference_papers(data))
-    return {_article_key(parser, article) for article in articles if article.get("title")}
+    return {
+        _article_key(parser, article) for article in articles if article.get("title")
+    }
 
 
 def _education_key(education: dict[str, Any]) -> str:
@@ -141,9 +146,11 @@ def _db_article_keys(conn: sqlite3.Connection, researcher_id: int) -> set[str]:
     ).fetchall()
     parser = LattesParser()
     return {
-        f"doi:{row['doi'].strip().lower()}"
-        if (row["doi"] or "").strip()
-        else f"title_year:{parser.normalize_title(row['title'])}|{row['year'] or ''}"
+        (
+            f"doi:{row['doi'].strip().lower()}"
+            if (row["doi"] or "").strip()
+            else f"title_year:{parser.normalize_title(row['title'])}|{row['year'] or ''}"
+        )
         for row in rows
     }
 
@@ -306,9 +313,7 @@ def _lattes_reconciliation(conn: sqlite3.Connection) -> dict[str, Any]:
                     "file": filename,
                     "json_name": json_name,
                     "lattes_id": lattes_id,
-                    "extracted": {
-                        key: len(value) for key, value in extracted.items()
-                    },
+                    "extracted": {key: len(value) for key, value in extracted.items()},
                 }
             )
             continue
@@ -320,12 +325,22 @@ def _lattes_reconciliation(conn: sqlite3.Connection) -> dict[str, Any]:
             "advisorships": _db_advisorship_keys(conn, researcher_id),
         }
 
-        per_file = {"file": filename, "researcher_id": researcher_id, "json_name": json_name}
+        per_file = {
+            "file": filename,
+            "researcher_id": researcher_id,
+            "json_name": json_name,
+        }
         has_delta = False
         for entity in ("projects", "articles", "educations", "advisorships"):
             result = _reconcile_entity(extracted[entity], persisted[entity])
             per_file[entity] = result
-            for key in ("extracted_unique", "persisted_unique", "matched", "missing_in_db", "extra_in_db"):
+            for key in (
+                "extracted_unique",
+                "persisted_unique",
+                "matched",
+                "missing_in_db",
+                "extra_in_db",
+            ):
                 totals[entity][key] += result[key]
             if result["missing_in_db"] or result["extra_in_db"]:
                 has_delta = True
@@ -488,7 +503,9 @@ def generate_report(db_path: str = DB_PATH) -> dict[str, Any]:
             "db_path": db_path,
             "source_inventory": _source_inventory(),
             "db_inventory": _db_inventory(conn),
-            "duplicate_summary": {key: len(value) for key, value in duplicate_report.items()},
+            "duplicate_summary": {
+                key: len(value) for key, value in duplicate_report.items()
+            },
             "health_checks": _health_checks(conn),
             "lattes_reconciliation": _lattes_reconciliation(conn),
         }

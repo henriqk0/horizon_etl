@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from prefect import flow, get_run_logger, task
 

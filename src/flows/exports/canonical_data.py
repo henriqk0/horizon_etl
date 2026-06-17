@@ -1,5 +1,4 @@
 import os
-import zipfile
 from typing import Optional
 
 from loguru import logger
@@ -215,22 +214,6 @@ def export_advisorship_analytics_task(output_dir: str):
     exporter.generate_advisorship_mart(input_path, output_path)
 
 
-@task(name="zip_exports_task")
-def zip_exports_task(output_dir: str):
-    zip_path = os.path.join(output_dir, "exports_canonical.zip")
-    logger.info("Zipping exports to {}...", zip_path)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(output_dir):
-            for fname in files:
-                if fname == "exports_canonical.zip":
-                    continue
-                fpath = os.path.join(root, fname)
-                arcname = os.path.relpath(fpath, output_dir)
-                zf.write(fpath, arcname)
-    size_mb = os.path.getsize(zip_path) / (1024 * 1024)
-    logger.info("Exports zipped: {} ({:.1f} MB)", zip_path, size_mb)
-
-
 @flow(name="Export Canonical Data Flow", **telegram_flow_state_handlers())
 def export_canonical_data_flow(
     output_dir: str = "data/exports", campus: Optional[str] = None
@@ -276,7 +259,6 @@ def export_canonical_data_flow(
     export_outside_ifes_collaboration_graph_flow(output_dir=output_dir)
     export_null_researchers_collaboration_graph_flow(output_dir=output_dir)
     export_research_group_membership_graphs_manifest_flow(output_dir=output_dir)
-    zip_exports_task(output_dir)
 
 
 if __name__ == "__main__":

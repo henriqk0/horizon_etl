@@ -49,7 +49,8 @@ class JsonSink(IExportSink):
                 # Check for SQLAlchemy model (has __table__)
                 if hasattr(obj, "__table__"):
                     return {
-                        c.name: serialize(getattr(obj, c.name)) for c in obj.__table__.columns
+                        c.name: serialize(getattr(obj, c.name))
+                        for c in obj.__table__.columns
                     }
 
                 if hasattr(obj, "__dict__"):

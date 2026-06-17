@@ -1,7 +1,7 @@
-import os
 import json
-from datetime import datetime
+import os
 from collections import Counter, defaultdict
+from datetime import datetime
 from typing import Any, List, Optional
 
 from eo_lib import InitiativeController, OrganizationController, PersonController
@@ -12,10 +12,17 @@ from research_domain import (
     ResearcherController,
     ResearchGroupController,
 )
-from src.research_domain_compat import AdvisorshipRole
+from sqlalchemy import text
 
-from src.core.ports.export_sink import IExportSink
 from src.core.logic.export_campus_resolver import ExportCampusResolver
+from src.core.logic.pii_anonymizer import (
+    anonymize_person_data,
+    is_anonymized_cpf,
+    scrub_pii_deep,
+    scrub_source_record_phones,
+)
+from src.core.ports.export_sink import IExportSink
+from src.research_domain_compat import AdvisorshipRole
 from src.tracking.entities import (
     AttributeAssertion,
     EntityChangeLog,
@@ -23,11 +30,12 @@ from src.tracking.entities import (
     IngestionRun,
     SourceRecord,
 )
-from sqlalchemy import text
+from src.tracking.recorder import sanitize_payload
 
 try:
     from research_domain.controllers import ArticleController
 except ImportError:
+
     class ArticleController:  # type: ignore[override]
         def __init__(self, *_args, **_kwargs):
             logger.warning(
@@ -364,9 +372,7 @@ class CanonicalDataExporter:
         return export_dict
 
     @classmethod
-    def _collect_participant_person_ids(
-        cls, *person_maps: dict[Any, Any]
-    ) -> set[Any]:
+    def _collect_participant_person_ids(cls, *person_maps: dict[Any, Any]) -> set[Any]:
         participant_ids: set[Any] = set()
         for person_map in person_maps:
             for person_id in person_map.keys():
@@ -660,9 +666,7 @@ class CanonicalDataExporter:
         ):
             classification = "student"
             confidence = (
-                "high"
-                if (has_project_student or has_advisorship_student)
-                else "medium"
+                "high" if (has_project_student or has_advisorship_student) else "medium"
             )
         elif has_any_student and has_strong_student and not has_strong_staff_signal:
             classification = "student"
@@ -869,7 +873,7 @@ class CanonicalDataExporter:
                     "source_record_pk": record.get("source_record_pk"),
                     "selection_reason": record.get("selection_reason"),
                     "asserted_at": record.get("asserted_at"),
-                    "value": record.get("value_json"),
+                    "value": sanitize_payload(record.get("value_json")),
                     "value_hash": record.get("value_hash"),
                 }
 
@@ -895,9 +899,11 @@ class CanonicalDataExporter:
                     "source_file": record.get("source_file"),
                     "source_path": record.get("source_path"),
                     "changed_at": record.get("changed_at"),
-                    "changed_fields": record.get("changed_fields_json"),
-                    "before": record.get("before_json"),
-                    "after": record.get("after_json"),
+                    "changed_fields": sanitize_payload(
+                        record.get("changed_fields_json")
+                    ),
+                    "before": sanitize_payload(record.get("before_json")),
+                    "after": sanitize_payload(record.get("after_json")),
                     "reason": record.get("reason"),
                 }
                 items[entity_id]["changes"].append(change)
@@ -910,9 +916,7 @@ class CanonicalDataExporter:
 
             return list(items.values())
         except Exception as exc:
-            logger.warning(
-                f"Failed to build tracking export for {entity_type}: {exc}"
-            )
+            logger.warning(f"Failed to build tracking export for {entity_type}: {exc}")
             return []
 
     def _get_campus_resolver(self) -> ExportCampusResolver:
@@ -950,6 +954,11 @@ class CanonicalDataExporter:
         for row in rows:
             item = dict(row)
             item.setdefault("campus", self._resolve_record_campus(item, entity_type))
+            item = scrub_pii_deep(item)
+            if entity_type == "source_record":
+                payload = item.get("raw_payload_json")
+                if isinstance(payload, dict):
+                    item["raw_payload_json"] = scrub_source_record_phones(payload)
             enriched.append(item)
         return enriched
 
@@ -1001,9 +1010,29 @@ class CanonicalDataExporter:
         entity_type: Optional[str] = None,
     ) -> None:
         data = self._load_tracking_entities(model, entity_name)
-        self._export_entities(
-            data, output_path, entity_name, entity_type=entity_type
-        )
+
+        logger.info(f"Exporting {len(data)} {entity_name}...")
+        try:
+            export_data = []
+            for item in data:
+                item_dict = self._item_to_export_dict(item)
+                for key in [
+                    "raw_payload_json",
+                    "value_json",
+                    "changed_fields_json",
+                    "before_json",
+                    "after_json",
+                ]:
+                    if key in item_dict and item_dict[key] is not None:
+                        item_dict[key] = sanitize_payload(item_dict[key])
+                export_data.append(item_dict)
+
+            export_data = self._enrich_export_rows(export_data, entity_type=entity_type)
+            self.sink.export(export_data, output_path)
+            logger.info(f"Successfully exported {entity_name} to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to export {entity_name}: {e}")
+            raise e
 
     def export_organizations(self, output_path: str):
         """
@@ -1054,7 +1083,7 @@ class CanonicalDataExporter:
 
         # Fetch raw list
         researchers = self.researcher_ctrl.get_all()
-        
+
         # Enrichment Data
         # 1. Initiatives (Researcher -> [Initiatives])
         # We need to scan all initiatives' teams/members to map person_id -> initiative list
@@ -1063,8 +1092,9 @@ class CanonicalDataExporter:
         try:
             initiatives = self.initiative_ctrl.get_all()
             from eo_lib import TeamController
+
             team_ctrl = TeamController()
-            
+
             # Pre-fetch initiative types
             raw_types = self.initiative_ctrl.list_initiative_types()
             types_map = {}
@@ -1085,18 +1115,20 @@ class CanonicalDataExporter:
                     }
                 except Exception:
                     rg_ids = set()
-            
+
             for init in initiatives:
                 try:
                     teams = self.initiative_ctrl.get_teams(init.id)
                     for t in teams:
-                        t_id = getattr(t, "id", t.get("id") if isinstance(t, dict) else None)
-                        
-                        # FILTER: If the team is a Research Group, memberships in this team 
+                        t_id = getattr(
+                            t, "id", t.get("id") if isinstance(t, dict) else None
+                        )
+
+                        # FILTER: If the team is a Research Group, memberships in this team
                         # should not count as being PART OF the initiative in the Researchers canonical export.
                         if t_id in rg_ids:
                             continue
-                            
+
                         if t_id:
                             members = team_ctrl.get_members(t_id)
                             for m in members:
@@ -1104,72 +1136,109 @@ class CanonicalDataExporter:
                                 if p_id:
                                     if p_id not in person_initiatives_map:
                                         person_initiatives_map[p_id] = []
-                                    
+
                                     # Consolidate roles if person is in multiple teams (unlikely now with filter, but safe)
-                                    existing = next((i for i in person_initiatives_map[p_id] if i["id"] == init.id), None)
+                                    existing = next(
+                                        (
+                                            i
+                                            for i in person_initiatives_map[p_id]
+                                            if i["id"] == init.id
+                                        ),
+                                        None,
+                                    )
                                     role_name = m.role.name if m.role else "Member"
-                                    
+
                                     if not existing:
                                         # Get Initiative Type
-                                        init_type = types_map.get(init.initiative_type_id)
-                                        type_data = {
-                                            "id": init_type.get("id") if isinstance(init_type, dict) else getattr(init_type, "id", None),
-                                            "name": init_type.get("name") if isinstance(init_type, dict) else getattr(init_type, "name", None)
-                                        } if init_type else None
+                                        init_type = types_map.get(
+                                            init.initiative_type_id
+                                        )
+                                        type_data = (
+                                            {
+                                                "id": (
+                                                    init_type.get("id")
+                                                    if isinstance(init_type, dict)
+                                                    else getattr(init_type, "id", None)
+                                                ),
+                                                "name": (
+                                                    init_type.get("name")
+                                                    if isinstance(init_type, dict)
+                                                    else getattr(
+                                                        init_type, "name", None
+                                                    )
+                                                ),
+                                            }
+                                            if init_type
+                                            else None
+                                        )
 
-                                        person_initiatives_map[p_id].append({
-                                            "id": init.id,
-                                            "name": init.name,
-                                            "status": init.status,
-                                            "initiative_type": type_data,
-                                            "demandante": {
-                                                "id": init.demandante.id,
-                                                "name": init.demandante.name,
-                                                "short_name": getattr(init.demandante, "short_name", None)
-                                            } if getattr(init, "demandante", None) else None,
-                                            "roles": [role_name]
-                                        })
+                                        person_initiatives_map[p_id].append(
+                                            {
+                                                "id": init.id,
+                                                "name": init.name,
+                                                "status": init.status,
+                                                "initiative_type": type_data,
+                                                "demandante": (
+                                                    {
+                                                        "id": init.demandante.id,
+                                                        "name": init.demandante.name,
+                                                        "short_name": getattr(
+                                                            init.demandante,
+                                                            "short_name",
+                                                            None,
+                                                        ),
+                                                    }
+                                                    if getattr(init, "demandante", None)
+                                                    else None
+                                                ),
+                                                "roles": [role_name],
+                                            }
+                                        )
                                     else:
                                         if role_name not in existing["roles"]:
                                             existing["roles"].append(role_name)
                 except Exception:
                     continue
         except Exception as e:
-            logger.warning(f"Failed to fetch initiatives for researcher enrichment: {e}")
+            logger.warning(
+                f"Failed to fetch initiatives for researcher enrichment: {e}"
+            )
 
         # 2. Research Groups (Researcher -> [Groups])
         # We can reuse the same logic if we know which teams are groups
-        # OR we can use the Group members if exposed. 
+        # OR we can use the Group members if exposed.
         # ResearchGroupController usually exposes `get_members`? No, it exposes `get_all` groups.
         # But groups are Teams.
         person_groups_map = {}
         try:
             rg_ctrl = ResearchGroupController()
             rg_ctrl.get_all()
-            
+
             # Since RGs are teams, we might have already processed them in initiatives if they are linked there?
             # No, RGs are distinct entities in the domain lib, but they implement Team interface or are wrapped.
             # Usually RG has a mirrored Team.
             # If we don't have a direct "get members of group" in the controller, we rely on the DB or dgp_cnpq_lib.
-            # Checking `ResearchGroupController` in `research_domain`... 
+            # Checking `ResearchGroupController` in `research_domain`...
             # Assuming we can access the underlying team or members.
             # If not easy, we might skip or do a best effort.
             # Strategy: Access the database session again to query group_members tables directly for speed.
-            
+
             # Query group members (person_id -> group info)
             # Schema: research_groups.id matches teams.id (joined inheritance or logical link)
             # Members are in team_members table.
             # Query group members (person_id -> group info)
             # Schema: research_groups.id matches teams.id (joined inheritance or logical link)
             # Members are in team_members table.
-            
+
             # Correct Query with 3-way join
-            g_query = text("""
+            g_query = text(
+                """
                 SELECT tm.person_id, rg.id, t.name
                 FROM team_members tm
                 JOIN research_groups rg ON tm.team_id = rg.id
                 JOIN teams t ON rg.id = t.id
-            """)
+            """
+            )
             if session is not None:
                 g_result = session.execute(g_query).fetchall()
                 for row in g_result:
@@ -1177,24 +1246,29 @@ class CanonicalDataExporter:
                     if pid not in person_groups_map:
                         person_groups_map[pid] = []
                     person_groups_map[pid].append({"id": gid, "name": gname})
-                
+
         except Exception as e:
-            logger.warning(f"Failed to fetch research groups for researcher enrichment: {e}")
+            logger.warning(
+                f"Failed to fetch research groups for researcher enrichment: {e}"
+            )
 
         # 3. Knowledge Areas (Researcher -> [KAs])
         person_kas_map = {}
         try:
             # Query researcher_knowledge_areas
             # uses researcher_id (which should map to person_id/researcher.id)
-            k_query = text("""
+            k_query = text(
+                """
                 SELECT rka.researcher_id, ka.id, ka.name
                 FROM researcher_knowledge_areas rka
                 JOIN knowledge_areas ka ON rka.area_id = ka.id
-            """)
+            """
+            )
             k_result = session.execute(k_query).fetchall()
             for row in k_result:
                 pid, kid, kname = row[0], row[1], row[2]
-                if pid not in person_kas_map: person_kas_map[pid] = []
+                if pid not in person_kas_map:
+                    person_kas_map[pid] = []
                 person_kas_map[pid].append({"id": kid, "name": kname})
 
         except Exception as e:
@@ -1206,14 +1280,15 @@ class CanonicalDataExporter:
             # Query academic_educations with Joins for localized names
             # researcher_id, institution_name, degree_name, course_title, start, end, thesis_title, advisor_name
             # Note: We need to join organizations and education_types
-            ae_query = text("""
-                SELECT 
-                    ae.researcher_id, 
-                    org.name as institution, 
-                    et.name as degree, 
-                    ae.title as course_name, 
-                    ae.start_year, 
-                    ae.end_year, 
+            ae_query = text(
+                """
+                SELECT
+                    ae.researcher_id,
+                    org.name as institution,
+                    et.name as degree,
+                    ae.title as course_name,
+                    ae.start_year,
+                    ae.end_year,
                     ae.thesis_title,
                     p_adv.name as advisor_name,
                     p_co.name as co_advisor_name
@@ -1224,8 +1299,9 @@ class CanonicalDataExporter:
                 LEFT JOIN persons p_adv ON adv.id = p_adv.id
                 LEFT JOIN researchers co ON ae.co_advisor_id = co.id
                 LEFT JOIN persons p_co ON co.id = p_co.id
-            """)
-            
+            """
+            )
+
             try:
                 ae_result = session.execute(ae_query).fetchall()
                 for row in ae_result:
@@ -1233,65 +1309,90 @@ class CanonicalDataExporter:
                     edu_item = {
                         "institution": row[1],
                         "degree": row[2],
-                        "course_name": row[3], # Mapped to title
+                        "course_name": row[3],  # Mapped to title
                         "start_year": row[4],
                         "end_year": row[5],
                         "thesis_title": row[6],
                         "advisor_name": row[7],
-                        "co_advisor_name": row[8]
+                        "co_advisor_name": row[8],
                     }
-                    if rid not in person_education_map: person_education_map[rid] = []
-                    
+                    if rid not in person_education_map:
+                        person_education_map[rid] = []
+
                     # Deduplication: Check if item already exists in the list
                     # Using a subset of keys for uniqueness check
                     is_duplicate = False
                     duplicate_index = -1
-                    
+
                     for idx, existing in enumerate(person_education_map[rid]):
-                         if (existing.get("institution") == edu_item.get("institution") and
-                             existing.get("degree") == edu_item.get("degree") and
-                             existing.get("course_name") == edu_item.get("course_name") and
-                             existing.get("start_year") == edu_item.get("start_year")):
-                             is_duplicate = True
-                             duplicate_index = idx
-                             break
-                    
+                        if (
+                            existing.get("institution") == edu_item.get("institution")
+                            and existing.get("degree") == edu_item.get("degree")
+                            and existing.get("course_name")
+                            == edu_item.get("course_name")
+                            and existing.get("start_year") == edu_item.get("start_year")
+                        ):
+                            is_duplicate = True
+                            duplicate_index = idx
+                            break
+
                     if not is_duplicate:
                         person_education_map[rid].append(edu_item)
                     else:
                         # If duplicate, assume the one with MORE info is better
                         existing = person_education_map[rid][duplicate_index]
-                        
-                        better_advisor = (not existing.get("advisor_name") and edu_item.get("advisor_name"))
-                        better_co_advisor = (not existing.get("co_advisor_name") and edu_item.get("co_advisor_name"))
-                        
+
+                        better_advisor = not existing.get(
+                            "advisor_name"
+                        ) and edu_item.get("advisor_name")
+                        better_co_advisor = not existing.get(
+                            "co_advisor_name"
+                        ) and edu_item.get("co_advisor_name")
+
                         if better_advisor or better_co_advisor:
-                             person_education_map[rid][duplicate_index] = edu_item
+                            person_education_map[rid][duplicate_index] = edu_item
             except Exception as e:
-                logger.warning(f"Failed to export Education data (Schema mismatch?): {e}")
+                logger.warning(
+                    f"Failed to export Education data (Schema mismatch?): {e}"
+                )
         except Exception as e:
-             logger.warning(f"Failed to fetch Academic Education for researcher enrichment: {e}")
+            logger.warning(
+                f"Failed to fetch Academic Education for researcher enrichment: {e}"
+            )
 
         # 5. Articles (Researcher -> [Articles])
         person_articles_map = {}
         try:
-            a_query = text("""
+            a_query = text(
+                """
                 SELECT aa.researcher_id, a.id, a.title, a.year, a.type, a.doi, a.journal_conference
                 FROM article_authors aa
                 JOIN articles a ON aa.article_id = a.id
-            """)
+            """
+            )
             a_result = session.execute(a_query).fetchall()
             for row in a_result:
-                rid, aid, atitle, ayear, atype, adoi, j_c = row[0], row[1], row[2], row[3], row[4], row[5], row[6]
-                if rid not in person_articles_map: person_articles_map[rid] = []
-                person_articles_map[rid].append({
-                    "id": aid,
-                    "title": atitle,
-                    "year": ayear,
-                    "type": atype,
-                    "doi": adoi,
-                    "journal_conference": j_c
-                })
+                rid, aid, atitle, ayear, atype, adoi, j_c = (
+                    row[0],
+                    row[1],
+                    row[2],
+                    row[3],
+                    row[4],
+                    row[5],
+                    row[6],
+                )
+                if rid not in person_articles_map:
+                    person_articles_map[rid] = []
+                person_articles_map[rid].append(
+                    {
+                        "id": aid,
+                        "title": atitle,
+                        "year": ayear,
+                        "type": atype,
+                        "doi": adoi,
+                        "journal_conference": j_c,
+                    }
+                )
         except Exception as e:
             logger.warning(f"Failed to fetch Articles for researcher enrichment: {e}")
 
@@ -1299,7 +1400,7 @@ class CanonicalDataExporter:
         person_advisorships_map = {}
         try:
             adv_result = self._fetch_researcher_advisorship_rows(session)
-            
+
             for row in adv_result:
                 row_data = self._row_to_dict(row)
                 sup_id = row_data["supervisor_id"]
@@ -1308,27 +1409,37 @@ class CanonicalDataExporter:
                     "name": row_data["name"],
                     "status": row_data["status"],
                     "start_year": (
-                        row_data["start_date"].year 
-                        if hasattr(row_data["start_date"], "year") 
-                        else int(str(row_data["start_date"])[:4]) if row_data["start_date"] else None
+                        row_data["start_date"].year
+                        if hasattr(row_data["start_date"], "year")
+                        else (
+                            int(str(row_data["start_date"])[:4])
+                            if row_data["start_date"]
+                            else None
+                        )
                     ),
                     "end_year": (
-                        row_data["end_date"].year 
-                        if hasattr(row_data["end_date"], "year") 
-                        else int(str(row_data["end_date"])[:4]) if row_data["end_date"] else None
+                        row_data["end_date"].year
+                        if hasattr(row_data["end_date"], "year")
+                        else (
+                            int(str(row_data["end_date"])[:4])
+                            if row_data["end_date"]
+                            else None
+                        )
                     ),
                     "type": row_data["advisorship_type"],
                     "initiative_type": row_data["type_name"],
                     "person_id": row_data.get("person_id"),
                     "person_name": row_data["person_name"],
                 }
-                
+
                 if sup_id not in person_advisorships_map:
                     person_advisorships_map[sup_id] = []
                 person_advisorships_map[sup_id].append(adv_data)
-                
+
         except Exception as e:
-            logger.warning(f"Failed to fetch Advisorships for researcher enrichment: {e}")
+            logger.warning(
+                f"Failed to fetch Advisorships for researcher enrichment: {e}"
+            )
 
         person_project_roles_map = self._fetch_person_project_roles(session)
         person_research_group_roles_map = self._fetch_person_research_group_roles(
@@ -1383,8 +1494,8 @@ class CanonicalDataExporter:
                             person_id,
                         )
                         continue
-                    researchers_by_id[person_id] = self._build_researcher_base_export_dict(
-                        person
+                    researchers_by_id[person_id] = (
+                        self._build_researcher_base_export_dict(person)
                     )
                     added_participant_count += 1
             except Exception as exc:
@@ -1412,22 +1523,24 @@ class CanonicalDataExporter:
 
             for init in init_list:
                 # Standardize roles to English and pick primary if single string preferred
-                # User previously had a single string, but let's provide the first one found 
-                # or join them if we want to be thorough. 
+                # User previously had a single string, but let's provide the first one found
+                # or join them if we want to be thorough.
                 # To match previous structure but with correct data:
                 role_map = {
                     "Coordenador": "Coordinator",
                     "Pesquisador": "Researcher",
                     "Estudante": "Student",
                     "Líder": "Leader",
-                    "Membro": "Member"
+                    "Membro": "Member",
                 }
                 translated_roles = [role_map.get(r, r) for r in init["roles"]]
-                
+
                 init_export = init.copy()
-                init_export["role"] = translated_roles[0] # Primary role
+                init_export["role"] = translated_roles[0]  # Primary role
                 del init_export["roles"]
-                init_export["campus"] = resolver.get_campus("initiative", init_export["id"])
+                init_export["campus"] = resolver.get_campus(
+                    "initiative", init_export["id"]
+                )
                 initiatives_data.append(init_export)
 
             r_dict["initiatives"] = initiatives_data
@@ -1481,6 +1594,10 @@ class CanonicalDataExporter:
             )
             r_dict["campus"] = resolver.get_campus("researcher", p_id_int or p_id)
 
+            if r_dict.get("identification_id") and not is_anonymized_cpf(
+                r_dict["identification_id"]
+            ):
+                r_dict = anonymize_person_data(r_dict)
             export_data.append(r_dict)
 
         logger.info(
@@ -1517,9 +1634,9 @@ class CanonicalDataExporter:
         try:
             all_rgs = rg_ctrl.get_all()
             for rg in all_rgs:
-                 rg_id = getattr(rg, "id", None)
-                 if rg_id:
-                     rgs_by_team_id[rg_id] = rg
+                rg_id = getattr(rg, "id", None)
+                if rg_id:
+                    rgs_by_team_id[rg_id] = rg
         except Exception as e:
             logger.warning(f"Failed to fetch Research Groups for export mapping: {e}")
 
@@ -1529,33 +1646,40 @@ class CanonicalDataExporter:
         initiative_kas_map = {}
 
         try:
-             from sqlalchemy import text
-             session = rg_ctrl._service._repository._session
-             
-             # Group KAs (Optional enrichment if needed elsewhere)
-             g_query = text("""
+            from sqlalchemy import text
+
+            session = rg_ctrl._service._repository._session
+
+            # Group KAs (Optional enrichment if needed elsewhere)
+            g_query = text(
+                """
                 SELECT gka.group_id, ka.id, ka.name
                 FROM group_knowledge_areas gka
                 JOIN knowledge_areas ka ON gka.area_id = ka.id
-             """)
-             g_result = session.execute(g_query).fetchall()
-             for row in g_result:
-                 gid = row[0]
-                 if gid not in group_kas_map: group_kas_map[gid] = []
-                 group_kas_map[gid].append({"id": row[1], "name": row[2]})
+             """
+            )
+            g_result = session.execute(g_query).fetchall()
+            for row in g_result:
+                gid = row[0]
+                if gid not in group_kas_map:
+                    group_kas_map[gid] = []
+                group_kas_map[gid].append({"id": row[1], "name": row[2]})
 
-             # Initiative KAs
-             i_query = text("""
+            # Initiative KAs
+            i_query = text(
+                """
                 SELECT ika.initiative_id, ka.id, ka.name
                 FROM initiative_knowledge_areas ika
                 JOIN knowledge_areas ka ON ika.area_id = ka.id
-             """)
-             i_result = session.execute(i_query).fetchall()
-             for row in i_result:
-                 iid = row[0]
-                 if iid not in initiative_kas_map: initiative_kas_map[iid] = []
-                 initiative_kas_map[iid].append({"id": row[1], "name": row[2]})
-                 
+             """
+            )
+            i_result = session.execute(i_query).fetchall()
+            for row in i_result:
+                iid = row[0]
+                if iid not in initiative_kas_map:
+                    initiative_kas_map[iid] = []
+                initiative_kas_map[iid].append({"id": row[1], "name": row[2]})
+
         except Exception as e:
             logger.warning(f"Failed to fetch Knowledge Area mappings: {e}")
 
@@ -1624,10 +1748,10 @@ class CanonicalDataExporter:
 
             # Enriched Team
             team_list = []
-            
+
             # Identify Research Group
             research_group_data = None
-            
+
             try:
                 teams = self.initiative_ctrl.get_teams(item.id)
                 for t_dict in teams:
@@ -1640,9 +1764,11 @@ class CanonicalDataExporter:
                             research_group_data = {
                                 "id": rg_id_val,
                                 "name": getattr(rg_obj, "name", "Unknown"),
-                                "campus": resolver.get_campus("research_group", rg_id_val),
+                                "campus": resolver.get_campus(
+                                    "research_group", rg_id_val
+                                ),
                             }
-                        
+
                         # FILTER: Skip adding members if the team is a Research Group
                         # These members are reported in the group's own context,
                         # not as direct initiative participants.
@@ -1698,27 +1824,35 @@ class CanonicalDataExporter:
                     "organization": org_data,
                     "parent_id": item.parent_id,
                     "team": team_list,
-                    "demandante": {
-                        "id": item.demandante.id,
-                        "name": item.demandante.name,
-                        "short_name": getattr(item.demandante, "short_name", None)
-                    } if getattr(item, "demandante", None) else None,
+                    "demandante": (
+                        {
+                            "id": item.demandante.id,
+                            "name": item.demandante.name,
+                            "short_name": getattr(item.demandante, "short_name", None),
+                        }
+                        if getattr(item, "demandante", None)
+                        else None
+                    ),
                     "campus": resolver.get_campus("initiative", item.id),
                     "research_group": research_group_data,
                     "knowledge_areas": initiative_kas_map.get(item.id, []),
                     "external_partner": (
                         item.metadata.get("external_partner")
                         if item.metadata and isinstance(item.metadata, dict)
-                        else getattr(item.metadata, "external_partner", None)
-                        if item.metadata
-                        else None
+                        else (
+                            getattr(item.metadata, "external_partner", None)
+                            if item.metadata
+                            else None
+                        )
                     ),
                     "external_research_group": (
                         item.metadata.get("external_research_group")
                         if item.metadata and isinstance(item.metadata, dict)
-                        else getattr(item.metadata, "external_research_group", None)
-                        if item.metadata
-                        else None
+                        else (
+                            getattr(item.metadata, "external_research_group", None)
+                            if item.metadata
+                            else None
+                        )
                     ),
                 }
             )
@@ -1788,12 +1922,18 @@ class CanonicalDataExporter:
 
     def export_ingestion_runs(self, output_path: str):
         self._export_tracking_entities(
-            IngestionRun, output_path, "Tracking Ingestion Runs", entity_type="ingestion_run"
+            IngestionRun,
+            output_path,
+            "Tracking Ingestion Runs",
+            entity_type="ingestion_run",
         )
 
     def export_source_records(self, output_path: str):
         self._export_tracking_entities(
-            SourceRecord, output_path, "Tracking Source Records", entity_type="source_record"
+            SourceRecord,
+            output_path,
+            "Tracking Source Records",
+            entity_type="source_record",
         )
 
     def export_entity_matches(self, output_path: str):
@@ -1854,9 +1994,7 @@ class CanonicalDataExporter:
         self.export_initiative_types(
             os.path.join(output_dir, "initiative_types_canonical.json")
         )
-        self.export_articles(
-            os.path.join(output_dir, "articles_canonical.json")
-        )
+        self.export_articles(os.path.join(output_dir, "articles_canonical.json"))
         self.export_advisorships(
             os.path.join(output_dir, "advisorships_canonical.json")
         )
@@ -1864,9 +2002,7 @@ class CanonicalDataExporter:
             os.path.join(output_dir, "advisorships_tracking.json")
         )
         self.export_tracking_entities(output_dir)
-        self.export_fellowships(
-            os.path.join(output_dir, "fellowships_canonical.json")
-        )
+        self.export_fellowships(os.path.join(output_dir, "fellowships_canonical.json"))
 
         logger.info("Canonical Data Export completed.")
 
@@ -1877,10 +2013,10 @@ class CanonicalDataExporter:
         resolver = self._get_campus_resolver()
         session = self.initiative_ctrl._service._repository._session
         result = self._fetch_advisorship_export_rows(session)
-        
+
         projects_map = {}
         orphans = []
-        
+
         for row in result:
             row_data = self._row_to_dict(row)
             adv_data = {
@@ -1889,14 +2025,14 @@ class CanonicalDataExporter:
                 "status": row_data["status"],
                 "description": row_data["description"],
                 "start_date": (
-                    row_data["start_date"].isoformat() 
-                    if hasattr(row_data["start_date"], "isoformat") 
+                    row_data["start_date"].isoformat()
+                    if hasattr(row_data["start_date"], "isoformat")
                     else str(row_data["start_date"]) if row_data["start_date"] else None
                 ),
                 "end_date": (
-                     row_data["end_date"].isoformat()
-                     if hasattr(row_data["end_date"], "isoformat")
-                     else str(row_data["end_date"]) if row_data["end_date"] else None
+                    row_data["end_date"].isoformat()
+                    if hasattr(row_data["end_date"], "isoformat")
+                    else str(row_data["end_date"]) if row_data["end_date"] else None
                 ),
                 "type": row_data["advisorship_type"],
                 "initiative_type": row_data["initiative_type_name"],
@@ -1905,15 +2041,19 @@ class CanonicalDataExporter:
                 "supervisor_id": row_data["supervisor_id"],
                 "supervisor_name": row_data["supervisor_name"],
                 "campus": resolver.get_campus("advisorship", row_data["id"]),
-                "fellowship": {
-                    "id": row_data["fellowship_id"],
-                    "name": row_data["fellowship_name"],
-                    "description": row_data["fellowship_description"],
-                    "value": row_data["fellowship_value"],
-                    "sponsor_name": row_data["sponsor_name"],
-                } if row_data["fellowship_id"] else None
+                "fellowship": (
+                    {
+                        "id": row_data["fellowship_id"],
+                        "name": row_data["fellowship_name"],
+                        "description": row_data["fellowship_description"],
+                        "value": row_data["fellowship_value"],
+                        "sponsor_name": row_data["sponsor_name"],
+                    }
+                    if row_data["fellowship_id"]
+                    else None
+                ),
             }
-            
+
             if row_data["parent_id"]:
                 if row_data["parent_id"] not in projects_map:
                     projects_map[row_data["parent_id"]] = {
@@ -1922,29 +2062,40 @@ class CanonicalDataExporter:
                         "status": row_data["parent_status"],
                         "description": row_data["parent_description"],
                         "start_date": (
-                            row_data["parent_start_date"].isoformat() 
-                            if hasattr(row_data["parent_start_date"], "isoformat") 
-                            else str(row_data["parent_start_date"]) if row_data["parent_start_date"] else None
+                            row_data["parent_start_date"].isoformat()
+                            if hasattr(row_data["parent_start_date"], "isoformat")
+                            else (
+                                str(row_data["parent_start_date"])
+                                if row_data["parent_start_date"]
+                                else None
+                            )
                         ),
                         "end_date": (
-                             row_data["parent_end_date"].isoformat()
-                             if hasattr(row_data["parent_end_date"], "isoformat")
-                             else str(row_data["parent_end_date"]) if row_data["parent_end_date"] else None
+                            row_data["parent_end_date"].isoformat()
+                            if hasattr(row_data["parent_end_date"], "isoformat")
+                            else (
+                                str(row_data["parent_end_date"])
+                                if row_data["parent_end_date"]
+                                else None
+                            )
                         ),
-                        "campus": resolver.get_campus("initiative", row_data["parent_id"]),
+                        "campus": resolver.get_campus(
+                            "initiative", row_data["parent_id"]
+                        ),
                         "advisorships": [],
                     }
                 projects_map[row_data["parent_id"]]["advisorships"].append(adv_data)
             else:
                 orphans.append(adv_data)
-        
+
         # 3. Fetch Team Members for all parent projects
         parent_ids = [pid for pid in projects_map.keys() if pid is not None]
         if parent_ids:
             # Format IDs for raw SQL IN clause
             ids_str = ",".join(str(pid) for pid in parent_ids)
-            members_query = text(f"""
-                SELECT 
+            members_query = text(
+                f"""
+                SELECT
                     it.initiative_id,
                     p.name as person_name,
                     r.name as role_name
@@ -1953,24 +2104,29 @@ class CanonicalDataExporter:
                 JOIN persons p ON tm.person_id = p.id
                 JOIN roles r ON tm.role_id = r.id
                 WHERE it.initiative_id IN ({ids_str})
-            """)
+            """
+            )
             try:
                 members_result = session.execute(members_query).fetchall()
-                
-                logger.info(f"Team fetch: Identified {len(parent_ids)} parents. Found {len(members_result)} members total.")
-                
+
+                logger.info(
+                    f"Team fetch: Identified {len(parent_ids)} parents. Found {len(members_result)} members total."
+                )
+
                 for m_row in members_result:
                     pid = m_row[0]  # initiative_id
                     if pid in projects_map:
                         if "team" not in projects_map[pid]:
                             projects_map[pid]["team"] = []
-                        projects_map[pid]["team"].append({
-                            "name": m_row[1], # person_name
-                            "role": m_row[2]  # role_name
-                        })
+                        projects_map[pid]["team"].append(
+                            {
+                                "name": m_row[1],  # person_name
+                                "role": m_row[2],  # role_name
+                            }
+                        )
             except Exception as e:
                 logger.warning(f"Failed to fetch team members for parent projects: {e}")
-        
+
         # Ensure 'team' and 'advisorships' fields exist for all (even if empty)
         for p in projects_map.values():
             if "team" not in p:
@@ -1980,21 +2136,27 @@ class CanonicalDataExporter:
 
         # Combine grouped projects, filtering out projects without advisorships
         final_data = [p for p in projects_map.values() if p.get("advisorships")]
-        
+
         if orphans:
-            final_data.append({
-                "id": None,
-                "name": "Sem Projeto Associado",
-                "status": "N/A",
-                "campus": None,
-                "team": [],
-                "description": "Bolsistas sem vínculo direto com um projeto de pesquisa estruturado no SigPesq.",
-                "advisorships": orphans
-            })
-        
-        logger.info(f"Filtered export: {len(final_data)} parent projects with advisorships (excluded {len(projects_map) - len([p for p in projects_map.values() if p.get('advisorships')])} projects without advisorships)")
+            final_data.append(
+                {
+                    "id": None,
+                    "name": "Sem Projeto Associado",
+                    "status": "N/A",
+                    "campus": None,
+                    "team": [],
+                    "description": "Bolsistas sem vínculo direto com um projeto de pesquisa estruturado no SigPesq.",
+                    "advisorships": orphans,
+                }
+            )
+
+        logger.info(
+            f"Filtered export: {len(final_data)} parent projects with advisorships (excluded {len(projects_map) - len([p for p in projects_map.values() if p.get('advisorships')])} projects without advisorships)"
+        )
         self.sink.export(final_data, output_path)
-        logger.info(f"Successfully exported {len(final_data)} parent projects with advisorships to {output_path}")
+        logger.info(
+            f"Successfully exported {len(final_data)} parent projects with advisorships to {output_path}"
+        )
 
     def export_fellowships(self, output_path: str):
         """
@@ -2094,7 +2256,10 @@ class CanonicalDataExporter:
                     global_stats["program_distribution"][prog_name] += 1
                     global_stats["investment_per_program"][prog_name] += val
 
-                if not isinstance(fell, dict) or float(fell.get("value", 0.0) or 0) == 0.0:
+                if (
+                    not isinstance(fell, dict)
+                    or float(fell.get("value", 0.0) or 0) == 0.0
+                ):
                     global_stats["volunteer_count"] += 1
 
                 # Supervisor Stats
