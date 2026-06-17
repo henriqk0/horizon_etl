@@ -37,6 +37,10 @@ PIPELINES = OrderedDict([
     ("export-canonical",  "Canonical data export"),
 ])
 
+# Core targets that exercise each unique pipeline without overlapping SigPesq
+# dependency (full-refresh already covers SigPesq ingestion).
+DEFAULT_TARGETS = ["full-refresh", "ingest-lattes-full", "sync-cnpq", "export-canonical"]
+
 DEFAULT_RUNS = 3
 SAVE_FILE = "data/reports/benchmark_results.json"
 
@@ -360,8 +364,8 @@ def main():
     )
     parser.add_argument(
         "--targets", nargs="+", choices=list(PIPELINES) + ["all"],
-        default=["all"],
-        help="Specific targets to benchmark (default: all)",
+        default=DEFAULT_TARGETS,
+        help="Specific targets to benchmark (default: full-refresh, ingest-lattes-full, sync-cnpq, export-canonical). Use 'all' for all pipelines.",
     )
     parser.add_argument(
         "--db-reset", action="store_true",
