@@ -139,14 +139,7 @@ sync-cnpq: prefect-server ## Sync CNPq research groups (CAMPUS=Serra)
 
 export-canonical: prefect-server ## Export all canonical data to a timestamped ZIP (no loose JSON files)
 	@$(FLOW_PYTHON) app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
-	@cd "$(OUTPUT_DIR)" && \
-	ts=$$(date +%Y%m%d_%H%M%S) && \
-	archive="canonical_export_$${ts}.zip" && \
-	json_files=$$(find . -name '*.json' -type f) && \
-	echo "$$json_files" | zip -@ "$$archive" && \
-	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
-	find . -type d -empty -delete 2>/dev/null; \
-	echo "Created: $(OUTPUT_DIR)/$$archive"
+	@$(PYTHON) scripts/export_zip.py "$(OUTPUT_DIR)"
 
 export-knowledge-areas-mart: prefect-server ## Export knowledge areas mart JSON
 	@$(FLOW_PYTHON) app.py ka_mart "$(OUTPUT_DIR)/knowledge_areas_mart.json" "$(CAMPUS)"
@@ -269,14 +262,7 @@ docker-sync-cnpq: docker-up ## Sync CNPq groups in Docker (CAMPUS=Serra)
 
 docker-export-canonical: docker-up ## Export canonical data to a timestamped ZIP in Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
-	@cd "$(OUTPUT_DIR)" && \
-	ts=$$(date +%Y%m%d_%H%M%S) && \
-	archive="canonical_export_$${ts}.zip" && \
-	json_files=$$(find . -name '*.json' -type f) && \
-	echo "$$json_files" | zip -@ "$$archive" && \
-	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
-	find . -type d -empty -delete 2>/dev/null; \
-	echo "Created: $(OUTPUT_DIR)/$$archive"
+	@$(PYTHON) scripts/export_zip.py "$(OUTPUT_DIR)"
 
 # --- Utilities ---
 
