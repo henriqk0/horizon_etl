@@ -1,5 +1,6 @@
 from eo_lib.infrastructure.database.postgres_client import PostgresClient
 from libbase.infrastructure.sql_repository import GenericSqlRepository
+from sqlalchemy import event
 from sqlalchemy.orm import sessionmaker
 
 from src.tracking.entities import (
@@ -18,10 +19,29 @@ from src.tracking.services import (
 )
 
 
+def _configure_sqlite_connection(db_api_connection, connection_record):
+    """Configure SQLite for better concurrency with Prefect parallel tasks."""
+    if "sqlite" in str(type(db_api_connection).__name__).lower():
+        cursor = db_api_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
+
+
 class TrackingServiceFactory:
+    _engine_configured = False
+
     @staticmethod
     def _session():
         client = PostgresClient()
+
+        # Configure SQLite PRAGMAs once per engine
+        if not TrackingServiceFactory._engine_configured:
+            engine_url = str(client._engine.url)
+            if "sqlite" in engine_url:
+                event.listen(client._engine, "connect", _configure_sqlite_connection)
+            TrackingServiceFactory._engine_configured = True
+
         return sessionmaker(
             autocommit=False,
             autoflush=False,

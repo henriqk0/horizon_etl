@@ -35,6 +35,7 @@ PREFECT_DB_SERVICE ?= database
 	anonymize-backfill anonymize-check \
 	test test-coverage lint format format-check ci-check \
 	audit-duplicates consolidate-duplicates \
+	benchmark \
 	status clean \
 	docker-up docker-stop docker-build \
 	docker-pipeline docker-weekly-flows docker-full-refresh \
@@ -138,14 +139,7 @@ sync-cnpq: prefect-server ## Sync CNPq research groups (CAMPUS=Serra)
 
 export-canonical: prefect-server ## Export all canonical data to a timestamped ZIP (no loose JSON files)
 	@$(FLOW_PYTHON) app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
-	@cd "$(OUTPUT_DIR)" && \
-	ts=$$(date +%Y%m%d_%H%M%S) && \
-	archive="canonical_export_$${ts}.zip" && \
-	json_files=$$(find . -name '*.json' -type f) && \
-	echo "$$json_files" | zip -@ "$$archive" && \
-	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
-	find . -type d -empty -delete 2>/dev/null; \
-	echo "Created: $(OUTPUT_DIR)/$$archive"
+	@$(PYTHON) scripts/export_zip.py "$(OUTPUT_DIR)"
 
 export-knowledge-areas-mart: prefect-server ## Export knowledge areas mart JSON
 	@$(FLOW_PYTHON) app.py ka_mart "$(OUTPUT_DIR)/knowledge_areas_mart.json" "$(CAMPUS)"
@@ -203,6 +197,16 @@ format-check: ## Check formatting without modifying files
 
 ci-check: format-check lint test ## Run all CI checks
 
+# --- Benchmark ---
+
+benchmark: ## Run pipeline benchmarks (RUNS=3, optional: TARGETS, DB_RESET, CLEAN_CACHE, SEQUENTIAL)
+	@$(PYTHON) scripts/benchmark.py \
+		$(if $(RUNS),-n $(RUNS)) \
+		$(if $(TARGETS),--targets $(TARGETS)) \
+		$(if $(DB_RESET),--db-reset) \
+		$(if $(CLEAN_CACHE),--clean-cache) \
+		$(if $(SEQUENTIAL),--sequential)
+
 # --- Data Quality ---
 
 audit-duplicates: ## Audit duplicate candidates in the database
@@ -258,14 +262,7 @@ docker-sync-cnpq: docker-up ## Sync CNPq groups in Docker (CAMPUS=Serra)
 
 docker-export-canonical: docker-up ## Export canonical data to a timestamped ZIP in Docker
 	@$(DOCKER_COMPOSE) run --rm --no-deps app app.py export_canonical "$(OUTPUT_DIR)" "$(CAMPUS)"
-	@cd "$(OUTPUT_DIR)" && \
-	ts=$$(date +%Y%m%d_%H%M%S) && \
-	archive="canonical_export_$${ts}.zip" && \
-	json_files=$$(find . -name '*.json' -type f) && \
-	echo "$$json_files" | zip -@ "$$archive" && \
-	echo "$$json_files" | while read f; do rm -f "$$f"; done && \
-	find . -type d -empty -delete 2>/dev/null; \
-	echo "Created: $(OUTPUT_DIR)/$$archive"
+	@$(PYTHON) scripts/export_zip.py "$(OUTPUT_DIR)"
 
 # --- Utilities ---
 
