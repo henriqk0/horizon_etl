@@ -814,7 +814,12 @@ def download_lattes_flow():
 
     lattes_ids = collect_lattes_ids_from_list(list_path)
     if not lattes_ids:
-        raise ValueError(f"No valid 16-digit Lattes IDs found in {list_path}")
+        logger.warning(
+            "No valid 16-digit Lattes IDs found in DB or historical export. "
+            "Skipping Lattes download — re-run after lattes_projects has "
+            "populated cnpq_url on researcher records."
+        )
+        return
     logger.info(f"Preparing to download {len(lattes_ids)} Lattes curricula.")
 
     if should_skip_download_if_cached(output_dir, lattes_ids):
