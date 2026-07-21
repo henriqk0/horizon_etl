@@ -20,6 +20,7 @@ a phase that bypassed it would write raw PII to the database.
 
 import subprocess
 import sys
+import time
 from typing import Optional
 
 from loguru import logger
@@ -36,6 +37,7 @@ _PHASES = [
     ("knowledge_areas_mart", ["ka_mart"], 900, False),
     ("initiatives_analytics_mart", ["analytics_mart"], 900, False),
     ("people_relationship_graph", ["people_graph"], 1800, False),
+    ("export_zip", [], 300, False),
     ("anonymize_backfill", ["anonymize_backfill"], 1800, True),
 ]
 
@@ -51,19 +53,24 @@ def _describe_rc(rc: Optional[int]) -> str:
 
 
 def _run_phase(name, argv_tail, timeout, campus, output_dir):
-    argv = [sys.executable, "app.py", *argv_tail]
-    # Pass positional args only where app.py expects them.
-    if argv_tail[0] == "cnpq_sync" and campus:
-        argv.append(campus)
-    elif argv_tail[0] == "export_canonical":
-        argv.append(output_dir)
+    if name == "export_zip":
+        argv = [sys.executable, "scripts/export_zip.py", output_dir]
+    else:
+        argv = [sys.executable, "app.py", *argv_tail]
+        # Pass positional args only where app.py expects them.
+        if argv_tail[0] == "cnpq_sync" and campus:
+            argv.append(campus)
+        elif argv_tail[0] == "export_canonical":
+            argv.append(output_dir)
     logger.info("▶ phase '{}': {}", name, " ".join(argv[1:]))
+    t0 = time.time()
     try:
         proc = subprocess.run(argv, timeout=timeout)
         rc = proc.returncode
     except subprocess.TimeoutExpired:
         logger.error("phase '{}' timed out after {}s", name, timeout)
         rc = None
+    elapsed = time.time() - t0
     ok = rc == 0
     log = logger.info if ok else logger.error
     log("phase '{}' finished: {}", name, _describe_rc(rc))
@@ -72,6 +79,7 @@ def _run_phase(name, argv_tail, timeout, campus, output_dir):
         "ok": ok,
         "rc": rc,
         "critical": bool(argv_tail and _critical(name)),
+        "elapsed": elapsed,
     }
 
 
@@ -82,14 +90,17 @@ def _critical(name):
     return False
 
 
-def _notify(results, crit_failed):
+def _notify(results, crit_failed, total_elapsed):
     from src.notifications.telegram import send_telegram_message
 
     head = "❌ Weekly ETL FALHOU" if crit_failed else "✅ Weekly ETL concluído"
     lines = [head, ""]
     for r in results:
         mark = "✓" if r["ok"] else "✗"
-        lines.append(f"{mark} {r['name']} — {_describe_rc(r['rc'])}")
+        lines.append(
+            f"{mark} {r['name']} — {_describe_rc(r['rc'])} ({r['elapsed']:.0f}s)"
+        )
+    lines.append(f"\nTempo total: {total_elapsed:.0f}s")
     if crit_failed:
         lines.append("")
         lines.append(
@@ -104,20 +115,34 @@ def run_weekly(
     """Run every weekly phase in its own subprocess. Returns a process exit code."""
     campus = (campus_name or "").strip()
     results = []
+    total_start = time.time()
     for name, argv_tail, timeout, _crit in _PHASES:
         results.append(_run_phase(name, argv_tail, timeout, campus, output_dir))
+    total_elapsed = time.time() - total_start
 
     failed = [r for r in results if not r["ok"]]
     crit_failed = [r for r in failed if r["critical"]]
 
-    logger.info("=== Weekly pipeline summary ===")
-    for r in results:
-        logger.info(
-            "  {} {} ({})", "✓" if r["ok"] else "✗", r["name"], _describe_rc(r["rc"])
+    width = 56
+    print(f"\n{'=' * width}")
+    print("  Weekly pipelines — Summary")
+    print(f"{'=' * width}")
+    for i, r in enumerate(results, 1):
+        flag = "✓" if r["ok"] else "✗"
+        print(
+            f"  Step {i:>2}  {flag}  {r['name']:.<{width - 20}s}"
+            f" {r['elapsed']:>6.1f}s"
         )
+    print(f"{'─' * width}")
+    print(f"  Total{' ' * (width - 13)} {total_elapsed:>6.1f}s")
+    if failed:
+        print()
+        for r in failed:
+            print(f"  FAIL  {r['name']} ({r['elapsed']:.1f}s)")
+    print()
 
     try:
-        _notify(results, crit_failed)
+        _notify(results, crit_failed, total_elapsed)
     except Exception as exc:  # notification must never change the run outcome
         logger.warning("Telegram summary failed: {}", exc)
 
