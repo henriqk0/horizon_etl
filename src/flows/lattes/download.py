@@ -701,7 +701,7 @@ def get_researchers_from_db() -> List[Dict]:
         if os.path.exists(export_path):
             try:
                 with zipfile.ZipFile(export_path) as z:
-                    with z.open("data/exports/researchers_canonical.json") as f:
+                    with z.open("researchers_canonical.json") as f:
                         historical = json.load(f)
                 for r in historical:
                     cnpq_url = str(r.get("cnpq_url") or "")
