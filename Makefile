@@ -120,6 +120,9 @@ full-refresh: db-reset prefect-server ## Reset DB and run full pipeline for all 
 weekly-flows: db-reset prefect-server ## Reset DB and run weekly source flows plus exports
 	@$(FLOW_PYTHON) app.py weekly "$(WEEKLY_CAMPUS)" "$(OUTPUT_DIR)"
 
+weekly-legacy: db-reset prefect-server ## Reset DB and run weekly flows in a single process (no subprocess isolation)
+	@$(FLOW_PYTHON) app.py weekly_inprocess "$(WEEKLY_CAMPUS)" "$(OUTPUT_DIR)"
+
 # --- Ingestion ---
 
 ingest-sigpesq: prefect-server ## Ingest all SigPesq reports (groups, projects, advisorships)
