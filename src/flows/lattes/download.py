@@ -802,6 +802,26 @@ def run_script_lattes_real(config_path: str):
         raise
 
 
+def _clean_stale_json_files(output_dir: str, valid_ids: set) -> None:
+    """Remove JSON files whose Lattes ID is not in the current valid set.
+
+    Filenames follow the pattern ``*_<id>.json`` where the last underscore-
+    separated token (before ``.json``) is the 16-digit Lattes ID.
+    """
+    if not os.path.isdir(output_dir):
+        return
+    removed = 0
+    for fname in os.listdir(output_dir):
+        if not fname.endswith(".json"):
+            continue
+        lid = fname.rsplit(".json", 1)[0].rsplit("_", 1)[-1]
+        if not LATTES_ID_RE.fullmatch(lid) or lid not in valid_ids:
+            os.remove(os.path.join(output_dir, fname))
+            removed += 1
+    if removed:
+        logger.info(f"Removed {removed} stale JSON files from {output_dir}")
+
+
 @flow(name="Download Lattes Curricula", **telegram_flow_state_handlers())
 def download_lattes_flow():
     base_dir = os.path.abspath("data")
@@ -820,6 +840,9 @@ def download_lattes_flow():
             "populated cnpq_url on researcher records."
         )
         return
+
+    _clean_stale_json_files(output_dir, lattes_ids)
+
     logger.info(f"Preparing to download {len(lattes_ids)} Lattes curricula.")
 
     if should_skip_download_if_cached(output_dir, lattes_ids):
