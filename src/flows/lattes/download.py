@@ -701,7 +701,7 @@ def get_researchers_from_db() -> List[Dict]:
         if os.path.exists(export_path):
             try:
                 with zipfile.ZipFile(export_path) as z:
-                    with z.open("data/exports/researchers_canonical.json") as f:
+                    with z.open("researchers_canonical.json") as f:
                         historical = json.load(f)
                 for r in historical:
                     cnpq_url = str(r.get("cnpq_url") or "")
@@ -802,6 +802,26 @@ def run_script_lattes_real(config_path: str):
         raise
 
 
+def _clean_stale_json_files(output_dir: str, valid_ids: set) -> None:
+    """Remove JSON files whose Lattes ID is not in the current valid set.
+
+    Filenames follow the pattern ``*_<id>.json`` where the last underscore-
+    separated token (before ``.json``) is the 16-digit Lattes ID.
+    """
+    if not os.path.isdir(output_dir):
+        return
+    removed = 0
+    for fname in os.listdir(output_dir):
+        if not fname.endswith(".json"):
+            continue
+        lid = fname.rsplit(".json", 1)[0].rsplit("_", 1)[-1]
+        if not LATTES_ID_RE.fullmatch(lid) or lid not in valid_ids:
+            os.remove(os.path.join(output_dir, fname))
+            removed += 1
+    if removed:
+        logger.info(f"Removed {removed} stale JSON files from {output_dir}")
+
+
 @flow(name="Download Lattes Curricula", **telegram_flow_state_handlers())
 def download_lattes_flow():
     base_dir = os.path.abspath("data")
@@ -814,7 +834,15 @@ def download_lattes_flow():
 
     lattes_ids = collect_lattes_ids_from_list(list_path)
     if not lattes_ids:
-        raise ValueError(f"No valid 16-digit Lattes IDs found in {list_path}")
+        logger.warning(
+            "No valid 16-digit Lattes IDs found in DB or historical export. "
+            "Skipping Lattes download — re-run after lattes_projects has "
+            "populated cnpq_url on researcher records."
+        )
+        return
+
+    _clean_stale_json_files(output_dir, lattes_ids)
+
     logger.info(f"Preparing to download {len(lattes_ids)} Lattes curricula.")
 
     if should_skip_download_if_cached(output_dir, lattes_ids):

@@ -44,6 +44,7 @@ class EntityManager:
         self._roles_cache: Dict[str, Role] = {}
         self._kas_cache: Dict[str, int] = {}
         self._orgs_cache: Dict[str, int] = {}
+        self._edu_types_cache: Dict[str, int] = {}
 
     def ensure_organization(
         self, name: str = "Instituto Federal do Espírito Santo", short_name: str = None
@@ -280,13 +281,19 @@ class EntityManager:
         if not name:
             return None
 
+        cache_key = normalize_text(name)
+        if cache_key in self._edu_types_cache:
+            return self._edu_types_cache[cache_key]
+
         try:
             # Check existing
             all_types = self.edu_type_controller.get_all()
             for t in all_types:
                 t_name = t.name if hasattr(t, "name") else t.get("name")
-                if normalize_text(t_name) == normalize_text(name):
-                    return t.id if hasattr(t, "id") else t.get("id")
+                if normalize_text(t_name) == cache_key:
+                    eid = t.id if hasattr(t, "id") else t.get("id")
+                    self._edu_types_cache[cache_key] = eid
+                    return eid
 
             # Create
             logger.info(f"Creating Education Type: {name}")
@@ -294,7 +301,9 @@ class EntityManager:
 
             # The controller returns the object or a dict depending on implementation
             # In v0.12.7 it returns the object directly
-            return new_type.id if hasattr(new_type, "id") else new_type.get("id")
+            eid = new_type.id if hasattr(new_type, "id") else new_type.get("id")
+            self._edu_types_cache[cache_key] = eid
+            return eid
         except Exception as e:
             logger.error(f"Failed to ensure Education Type '{name}': {e}")
             return None

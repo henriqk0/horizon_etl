@@ -36,9 +36,15 @@ def _is_id_column(name: str) -> bool:
     return name == "id" or name.endswith("_id")
 
 
-def _first_non_null(series: pd.Series):
+def _has_nested_values(series: pd.Series) -> bool:
+    """Check if any non-null value in the series is a dict or list."""
     non_null = series.dropna()
-    return non_null.iloc[0] if len(non_null) else None
+    if len(non_null) == 0:
+        return False
+    for v in non_null:
+        if isinstance(v, NESTED_TYPES):
+            return True
+    return False
 
 
 def _encode_columns(df: pd.DataFrame) -> list:
@@ -46,10 +52,13 @@ def _encode_columns(df: pd.DataFrame) -> list:
     integer dtype. Returns the list of columns that were JSON-encoded."""
     json_columns = []
     for col in df.columns:
-        sample = _first_non_null(df[col])
-        if isinstance(sample, NESTED_TYPES):
+        if _has_nested_values(df[col]):
             df[col] = [
-                json.dumps(v, ensure_ascii=False) if isinstance(v, NESTED_TYPES) else v
+                (
+                    json.dumps(v, ensure_ascii=False)
+                    if isinstance(v, NESTED_TYPES)
+                    else str(v) if v is not None and not isinstance(v, str) else v
+                )
                 for v in df[col]
             ]
             json_columns.append(col)

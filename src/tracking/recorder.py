@@ -140,12 +140,12 @@ class TrackingRecorder:
 
     @contextmanager
     def _controller(self, controller_cls, legacy_attr: str | None = None):
-        close_session = False
         if legacy_attr and hasattr(self, legacy_attr):
             controller = getattr(self, legacy_attr)
         else:
             controller = controller_cls()
-            close_session = True
+            if legacy_attr:
+                setattr(self, legacy_attr, controller)
 
         session = controller._service._repository._session
         try:
@@ -153,9 +153,6 @@ class TrackingRecorder:
         except Exception:
             session.rollback()
             raise
-        finally:
-            if close_session:
-                session.close()
 
     def _rollback_legacy_sessions(self) -> None:
         seen_sessions: set[int] = set()
