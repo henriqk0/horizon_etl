@@ -83,33 +83,39 @@ class PersonConsolidator:
             if len(members) < 2:
                 continue
 
-            # Split by identification_id to avoid false positive merges
-            by_id: Dict[str, List[Dict[str, Any]]] = {}
-            for m in members:
-                ident = (m.get("identification_id") or "").strip()
-                by_id.setdefault(ident, []).append(m)
-
-            for ident, ident_group in by_id.items():
-                if len(ident_group) < 2:
-                    continue
-                if not ident:
-                    continue
-
-                ordered = sorted(
-                    ident_group,
-                    key=lambda item: (self._quality_score(item), -int(item["id"])),
-                    reverse=True,
+            # Only attempt a name-only merge when no member carries a strong
+            # identification_id that differs from another member's.
+            # This catches the common case of two records for the same person
+            # where one has a real CPF/email and the other has empty or
+            # name-as-id fields.
+            strong_ids = {
+                (m.get("identification_id") or "").strip()
+                for m in members
+                if self._has_strong_identification(m)
+            }
+            if len(strong_ids) > 1:
+                # Multiple distinct strong IDs → potential homonyms, skip.
+                logger.debug(
+                    f"Skipping name-only merge for '{canonical_name}': "
+                    f"conflicting strong IDs: {strong_ids}"
                 )
-                winner_id = int(ordered[0]["id"])
-                loser_ids = [int(item["id"]) for item in ordered[1:]]
-                duplicate_groups.append(
-                    DuplicateGroup(
-                        canonical_name=canonical_name,
-                        winner_id=winner_id,
-                        loser_ids=loser_ids,
-                        members=ordered,
-                    )
+                continue
+
+            ordered = sorted(
+                members,
+                key=lambda item: (self._quality_score(item), -int(item["id"])),
+                reverse=True,
+            )
+            winner_id = int(ordered[0]["id"])
+            loser_ids = [int(item["id"]) for item in ordered[1:]]
+            duplicate_groups.append(
+                DuplicateGroup(
+                    canonical_name=canonical_name,
+                    winner_id=winner_id,
+                    loser_ids=loser_ids,
+                    members=ordered,
                 )
+            )
 
         return duplicate_groups
 
@@ -123,9 +129,7 @@ class PersonConsolidator:
             return url.rstrip("/").rsplit("/", 1)[-1].strip() or None
 
         cnpq_ids = {
-            _lattes_key(m.get("cnpq_url"))
-            for m in members
-            if _lattes_key(m.get("cnpq_url"))
+            _lattes_key(m.get("cnpq_url")) for m in members if _lattes_key(m.get("cnpq_url"))
         }
         if len(cnpq_ids) > 1:
             return f"cnpq_url ({sorted(cnpq_ids)})"
@@ -224,9 +228,7 @@ class PersonConsolidator:
                     self._update_fk_column(
                         conn, "advisorships", "supervisor_id", winner_id, loser_id
                     )
-                    self._update_fk_column(
-                        conn, "advisorships", "student_id", winner_id, loser_id
-                    )
+                    self._update_fk_column(conn, "advisorships", "student_id", winner_id, loser_id)
                 self._update_fk_column(
                     conn, "academic_educations", "researcher_id", winner_id, loser_id
                 )
@@ -247,9 +249,7 @@ class PersonConsolidator:
                         target_column="researcher_id",
                     )
                 if self._table_exists(conn, "awards"):
-                    self._update_fk_column(
-                        conn, "awards", "researcher_id", winner_id, loser_id
-                    )
+                    self._update_fk_column(conn, "awards", "researcher_id", winner_id, loser_id)
                 if self._table_exists(conn, "professional_activities"):
                     self._update_fk_column(
                         conn,
@@ -264,9 +264,7 @@ class PersonConsolidator:
                 conn.execute("DELETE FROM researchers WHERE id = ?", (loser_id,))
                 conn.execute("DELETE FROM persons WHERE id = ?", (loser_id,))
 
-    def _merge_person_record(
-        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
-    ) -> None:
+    def _merge_person_record(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
         winner = conn.execute(
             "SELECT identification_id, birthday FROM persons WHERE id = ?",
             (winner_id,),
@@ -342,9 +340,7 @@ class PersonConsolidator:
             (loser_id, loser_id, loser_id, loser_id, winner_id),
         )
 
-    def _merge_person_emails(
-        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
-    ) -> None:
+    def _merge_person_emails(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
         emails = conn.execute(
             "SELECT id, email FROM person_emails WHERE person_id = ?",
             (loser_id,),
@@ -421,9 +417,7 @@ class PersonConsolidator:
 
         conn.execute(f"DELETE FROM {table} WHERE {target_column} = ?", (loser_id,))
 
-    def _merge_team_members(
-        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
-    ) -> None:
+    def _merge_team_members(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
         rows = conn.execute(
             """
             SELECT id, team_id, role_id, start_date, end_date
@@ -503,9 +497,7 @@ class PersonConsolidator:
                     (winner_id, row["id"]),
                 )
 
-    def _merge_proficiencies(
-        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
-    ) -> None:
+    def _merge_proficiencies(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
         conn.execute(
             """
             UPDATE proficiencies SET researcher_id = ?
@@ -518,9 +510,7 @@ class PersonConsolidator:
         )
         conn.execute("DELETE FROM proficiencies WHERE researcher_id = ?", (loser_id,))
 
-    def _remap_lineage(
-        self, conn: sqlite3.Connection, winner_id: int, loser_id: int
-    ) -> None:
+    def _remap_lineage(self, conn: sqlite3.Connection, winner_id: int, loser_id: int) -> None:
         """Repoints tracking/lineage rows at the winner so entity_matches,
         attribute_assertions and entity_change_logs never reference a deleted
         person. UNIQUE-conflicting rows (same source record already linked to

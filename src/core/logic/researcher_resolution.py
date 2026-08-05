@@ -4,7 +4,10 @@ from loguru import logger
 from sqlalchemy import text
 
 from src.adapters.sources.lattes_parser import LattesParser
-from src.core.logic.researcher_creation import create_researcher_with_resume_fallback
+from src.core.logic.researcher_creation import (
+    _ensure_researcher_row,
+    create_researcher_with_resume_fallback,
+)
 from src.research_domain_compat import AdvisorshipRole
 
 
@@ -97,6 +100,7 @@ def resolve_or_create_researcher(
     name: Optional[str],
     identification_id: Optional[str] = None,
     emails: Optional[list[str]] = None,
+    session: Any = None,
 ) -> Optional[Any]:
     researcher = resolve_researcher_by_name(
         all_researchers,
@@ -109,6 +113,23 @@ def resolve_or_create_researcher(
     if not name:
         return None
 
+    # Try to find a matching Person (created by SigPesq via PersonMatcher)
+    # and promote them to Researcher so we don't create a duplicate.
+    person = _find_person_by_name(name, session)
+    if person:
+        person_id = getattr(person, "id", None)
+        if person_id:
+            _ensure_researcher_row(researcher_ctrl, person_id)
+            try:
+                promoted = researcher_ctrl.get_by_id(person_id)
+                all_researchers.append(promoted)
+                logger.debug(
+                    f"Promoted existing Person '{name}' (id={person_id}) to Researcher."
+                )
+                return promoted
+            except Exception:
+                pass
+
     researcher = create_researcher_with_resume_fallback(
         researcher_ctrl,
         name=name,
@@ -118,6 +139,74 @@ def resolve_or_create_researcher(
     if researcher:
         all_researchers.append(researcher)
     return researcher
+
+
+def _find_person_by_name(name: str, session: Any) -> Optional[Any]:
+    """Search the persons table for a name match.
+
+    When multiple persons share the same name, prefers the one that is
+    already promoted to a Researcher (has a row in the researchers table).
+    Falls back to accent-insensitive matching (PostgreSQL unaccent) if
+    exact case-insensitive match misses.
+    Returns the best match or None.
+    """
+    if not name or not session:
+        return None
+
+    name = name.strip()
+    name_lower = name.lower()
+
+    try:
+        rows = session.execute(
+            text(
+                """
+                SELECT id, name FROM persons
+                WHERE lower(name) = :name_lower
+                """
+            ),
+            {"name_lower": name_lower},
+        ).fetchall()
+
+        if not rows:
+            # Fallback: accent-insensitive match (PostgreSQL unaccent extension)
+            try:
+                rows = session.execute(
+                    text(
+                        """
+                        SELECT id, name FROM persons
+                        WHERE unaccent(lower(name)) = unaccent(:name_lower)
+                        """
+                    ),
+                    {"name_lower": name_lower},
+                ).fetchall()
+            except Exception:
+                pass
+
+        if rows:
+            # Prefer a person that is already a researcher (already promoted)
+            for row in rows:
+                is_res = session.execute(
+                    text("SELECT 1 FROM researchers WHERE id = :pid"),
+                    {"pid": row[0]},
+                ).scalar()
+                if is_res:
+                    class _Match:
+                        pass
+                    m = _Match()
+                    m.id, m.name = row[0], row[1]
+                    return m
+
+            # Otherwise, return the first match
+            class _Match:
+                pass
+            m = _Match()
+            m.id, m.name = rows[0][0], rows[0][1]
+            return m
+
+    except Exception:
+        pass
+
+    return None
 
 
 def _score_candidate(

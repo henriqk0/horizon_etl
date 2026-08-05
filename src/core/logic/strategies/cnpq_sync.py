@@ -265,10 +265,16 @@ class CnpqSyncLogic:
                 # 1. Ensure Researcher exists.
                 # identification_id must stay None: it is a CPF-like identity
                 # column, and storing a name hash there poisons future matching.
+                _res_session = None
+                try:
+                    _res_session = self.res_ctrl._service._repository._session
+                except Exception:
+                    pass
                 researcher = resolve_or_create_researcher(
                     self.res_ctrl,
                     all_res,
                     name=name,
+                    session=_res_session,
                 )
 
                 if researcher:
