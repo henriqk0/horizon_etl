@@ -167,8 +167,7 @@ class CanonicalDataExporter:
 
     @staticmethod
     def _fetch_researcher_advisorship_rows(session: Any) -> list[Any]:
-        members_query = text(
-            """
+        members_query = text("""
             SELECT
                 am_sup.supervisor_id,
                 am_std.student_id AS person_id,
@@ -196,8 +195,7 @@ class CanonicalDataExporter:
                 WHERE role_name = :supervisor_role
                 GROUP BY advisorship_id
             ) am_sup ON am_sup.advisorship_id = a.id
-            """
-        )
+            """)
         params = {
             "student_role": ADVISORSHIP_STUDENT_ROLE,
             "supervisor_role": ADVISORSHIP_SUPERVISOR_ROLE,
@@ -211,8 +209,7 @@ class CanonicalDataExporter:
                 exc,
             )
 
-        legacy_query = text(
-            """
+        legacy_query = text("""
             SELECT
                 a.supervisor_id AS supervisor_id,
                 a.student_id AS person_id,
@@ -229,8 +226,7 @@ class CanonicalDataExporter:
             LEFT JOIN initiative_types it ON i.initiative_type_id = it.id
             LEFT JOIN persons p ON a.student_id = p.id
             WHERE a.supervisor_id IS NOT NULL
-            """
-        )
+            """)
         try:
             return session.execute(legacy_query).fetchall()
         except Exception:
@@ -239,8 +235,7 @@ class CanonicalDataExporter:
 
     @staticmethod
     def _fetch_advisorship_export_rows(session: Any) -> list[Any]:
-        members_query = text(
-            """
+        members_query = text("""
             SELECT
                 a.id, i.name, i.status, i.description, i.start_date, i.end_date,
                 a.type as advisorship_type,
@@ -278,8 +273,7 @@ class CanonicalDataExporter:
             LEFT JOIN initiatives p_init ON i.parent_id = p_init.id
             LEFT JOIN fellowships f ON a.fellowship_id = f.id
             LEFT JOIN organizations o ON f.sponsor_id = o.id
-            """
-        )
+            """)
         params = {
             "student_role": ADVISORSHIP_STUDENT_ROLE,
             "supervisor_role": ADVISORSHIP_SUPERVISOR_ROLE,
@@ -293,8 +287,7 @@ class CanonicalDataExporter:
                 exc,
             )
 
-        legacy_query = text(
-            """
+        legacy_query = text("""
             SELECT
                 a.id, i.name, i.status, i.description, i.start_date, i.end_date,
                 a.type as advisorship_type,
@@ -320,8 +313,7 @@ class CanonicalDataExporter:
             LEFT JOIN initiatives p_init ON i.parent_id = p_init.id
             LEFT JOIN fellowships f ON a.fellowship_id = f.id
             LEFT JOIN organizations o ON f.sponsor_id = o.id
-            """
-        )
+            """)
         try:
             return session.execute(legacy_query).fetchall()
         except Exception:
@@ -426,15 +418,13 @@ class CanonicalDataExporter:
         if session is None:
             return {}
 
-        query = text(
-            """
+        query = text("""
             SELECT tm.person_id, r.name AS role_name
             FROM initiative_teams it
             JOIN team_members tm ON tm.team_id = it.team_id
             JOIN roles r ON r.id = tm.role_id
             WHERE it.team_id NOT IN (SELECT id FROM research_groups)
-            """
-        )
+            """)
 
         role_map: dict[Any, list[str]] = {}
         try:
@@ -454,14 +444,12 @@ class CanonicalDataExporter:
         if session is None:
             return {}
 
-        query = text(
-            """
+        query = text("""
             SELECT tm.person_id, r.name AS role_name
             FROM research_groups rg
             JOIN team_members tm ON tm.team_id = rg.id
             JOIN roles r ON r.id = tm.role_id
-            """
-        )
+            """)
 
         role_map: dict[Any, list[str]] = {}
         try:
@@ -481,13 +469,11 @@ class CanonicalDataExporter:
         if session is None:
             return {}
 
-        members_query = text(
-            """
+        members_query = text("""
             SELECT am.person_id, COALESCE(am.role_name, r.name) AS role_name
             FROM advisorship_members am
             LEFT JOIN roles r ON r.id = am.role_id
-            """
-        )
+            """)
 
         role_map: dict[Any, list[str]] = {}
         try:
@@ -497,8 +483,7 @@ class CanonicalDataExporter:
                 "Falling back to legacy advisorship columns for researcher role evidence: {}",
                 exc,
             )
-            legacy_query = text(
-                """
+            legacy_query = text("""
                 SELECT a.student_id AS person_id, :student_role AS role_name
                 FROM advisorships a
                 WHERE a.student_id IS NOT NULL
@@ -506,8 +491,7 @@ class CanonicalDataExporter:
                 SELECT a.supervisor_id AS person_id, :supervisor_role AS role_name
                 FROM advisorships a
                 WHERE a.supervisor_id IS NOT NULL
-                """
-            )
+                """)
             try:
                 rows = session.execute(
                     legacy_query,
@@ -534,16 +518,14 @@ class CanonicalDataExporter:
         if session is None:
             return {}
 
-        query = text(
-            """
+        query = text("""
             SELECT
                 p.id AS person_id,
                 p.identification_id,
                 pe.email
             FROM persons p
             LEFT JOIN person_emails pe ON pe.person_id = p.id
-            """
-        )
+            """)
 
         flags: dict[Any, bool] = {}
         try:
@@ -577,8 +559,7 @@ class CanonicalDataExporter:
         if session is None:
             return {}
 
-        query = text(
-            """
+        query = text("""
             SELECT ae.advisor_id AS person_id, COUNT(*) AS ref_count
             FROM academic_educations ae
             WHERE ae.advisor_id IS NOT NULL
@@ -588,8 +569,7 @@ class CanonicalDataExporter:
             FROM academic_educations ae
             WHERE ae.co_advisor_id IS NOT NULL
             GROUP BY ae.co_advisor_id
-            """
-        )
+            """)
 
         counts: dict[Any, int] = {}
         try:
@@ -710,8 +690,7 @@ class CanonicalDataExporter:
         if session is None:
             return []
 
-        entity_ids_query = text(
-            """
+        entity_ids_query = text("""
             SELECT canonical_entity_id AS entity_id
             FROM entity_matches
             WHERE canonical_entity_type = :entity_type
@@ -724,10 +703,8 @@ class CanonicalDataExporter:
             FROM entity_change_logs
             WHERE canonical_entity_type = :entity_type
             ORDER BY entity_id
-            """
-        )
-        source_rows_query = text(
-            """
+            """)
+        source_rows_query = text("""
             SELECT
                 em.canonical_entity_id AS entity_id,
                 sr.source_system,
@@ -742,10 +719,8 @@ class CanonicalDataExporter:
             JOIN source_records sr ON sr.id = em.source_record_id
             WHERE em.canonical_entity_type = :entity_type
             ORDER BY em.canonical_entity_id, em.matched_at, em.id
-            """
-        )
-        assertion_rows_query = text(
-            """
+            """)
+        assertion_rows_query = text("""
             SELECT
                 aa.canonical_entity_id AS entity_id,
                 aa.attribute_name,
@@ -764,10 +739,8 @@ class CanonicalDataExporter:
             JOIN source_records sr ON sr.id = aa.source_record_id
             WHERE aa.canonical_entity_type = :entity_type
             ORDER BY aa.canonical_entity_id, aa.attribute_name, aa.asserted_at DESC, aa.id DESC
-            """
-        )
-        change_rows_query = text(
-            """
+            """)
+        change_rows_query = text("""
             SELECT
                 ecl.canonical_entity_id AS entity_id,
                 ecl.operation,
@@ -791,8 +764,7 @@ class CanonicalDataExporter:
             LEFT JOIN source_records sr ON sr.id = ecl.source_record_id
             WHERE ecl.canonical_entity_type = :entity_type
             ORDER BY ecl.canonical_entity_id, ecl.changed_at, ecl.id
-            """
-        )
+            """)
 
         try:
             entity_ids = [
@@ -1239,14 +1211,12 @@ class CanonicalDataExporter:
             # Members are in team_members table.
 
             # Correct Query with 3-way join
-            g_query = text(
-                """
+            g_query = text("""
                 SELECT tm.person_id, rg.id, t.name
                 FROM team_members tm
                 JOIN research_groups rg ON tm.team_id = rg.id
                 JOIN teams t ON rg.id = t.id
-            """
-            )
+            """)
             if session is not None:
                 g_result = session.execute(g_query).fetchall()
                 for row in g_result:
@@ -1265,13 +1235,11 @@ class CanonicalDataExporter:
         try:
             # Query researcher_knowledge_areas
             # uses researcher_id (which should map to person_id/researcher.id)
-            k_query = text(
-                """
+            k_query = text("""
                 SELECT rka.researcher_id, ka.id, ka.name
                 FROM researcher_knowledge_areas rka
                 JOIN knowledge_areas ka ON rka.area_id = ka.id
-            """
-            )
+            """)
             k_result = session.execute(k_query).fetchall()
             for row in k_result:
                 pid, kid, kname = row[0], row[1], row[2]
@@ -1288,8 +1256,7 @@ class CanonicalDataExporter:
             # Query academic_educations with Joins for localized names
             # researcher_id, institution_name, degree_name, course_title, start, end, thesis_title, advisor_name
             # Note: We need to join organizations and education_types
-            ae_query = text(
-                """
+            ae_query = text("""
                 SELECT
                     ae.researcher_id,
                     org.name as institution,
@@ -1307,8 +1274,7 @@ class CanonicalDataExporter:
                 LEFT JOIN persons p_adv ON adv.id = p_adv.id
                 LEFT JOIN researchers co ON ae.co_advisor_id = co.id
                 LEFT JOIN persons p_co ON co.id = p_co.id
-            """
-            )
+            """)
 
             try:
                 ae_result = session.execute(ae_query).fetchall()
@@ -1371,13 +1337,11 @@ class CanonicalDataExporter:
         # 5. Articles (Researcher -> [Articles])
         person_articles_map = {}
         try:
-            a_query = text(
-                """
+            a_query = text("""
                 SELECT aa.researcher_id, a.id, a.title, a.year, a.type, a.doi, a.journal_conference
                 FROM article_authors aa
                 JOIN articles a ON aa.article_id = a.id
-            """
-            )
+            """)
             a_result = session.execute(a_query).fetchall()
             for row in a_result:
                 rid, aid, atitle, ayear, atype, adoi, j_c = (
@@ -1600,7 +1564,22 @@ class CanonicalDataExporter:
                     ),
                 )
             )
-            r_dict["campus"] = resolver.get_campus("researcher", p_id_int or p_id)
+            person_key = p_id_int or p_id
+            if r_dict.get("classification") == "student":
+                campuses = resolver.get_student_campuses(person_key)
+                r_dict["campuses"] = campuses
+                r_dict["campus"] = campuses[0] if campuses else None
+                r_dict["campus_resolution"] = resolver.get_student_resolution_audit(
+                    person_key
+                )
+            else:
+                r_dict["campus"] = resolver.get_campus("researcher", person_key)
+                r_dict["campuses"] = [r_dict["campus"]] if r_dict.get("campus") else []
+                r_dict["campus_resolution"] = (
+                    {"resolved_via": "research_group", "confidence": "medium"}
+                    if r_dict.get("campus")
+                    else {"resolved_via": "unresolved", "confidence": "low"}
+                )
 
             if r_dict.get("identification_id") and not is_anonymized_cpf(
                 r_dict["identification_id"]
@@ -1660,13 +1639,11 @@ class CanonicalDataExporter:
             session = rg_ctrl._service._repository._session
 
             # Group KAs (Optional enrichment if needed elsewhere)
-            g_query = text(
-                """
+            g_query = text("""
                 SELECT gka.group_id, ka.id, ka.name
                 FROM group_knowledge_areas gka
                 JOIN knowledge_areas ka ON gka.area_id = ka.id
-             """
-            )
+             """)
             g_result = session.execute(g_query).fetchall()
             for row in g_result:
                 gid = row[0]
@@ -1675,13 +1652,11 @@ class CanonicalDataExporter:
                 group_kas_map[gid].append({"id": row[1], "name": row[2]})
 
             # Initiative KAs
-            i_query = text(
-                """
+            i_query = text("""
                 SELECT ika.initiative_id, ka.id, ka.name
                 FROM initiative_knowledge_areas ika
                 JOIN knowledge_areas ka ON ika.area_id = ka.id
-             """
-            )
+             """)
             i_result = session.execute(i_query).fetchall()
             for row in i_result:
                 iid = row[0]
@@ -2193,8 +2168,7 @@ class CanonicalDataExporter:
         if parent_ids:
             # Format IDs for raw SQL IN clause
             ids_str = ",".join(str(pid) for pid in parent_ids)
-            members_query = text(
-                f"""
+            members_query = text(f"""
                 SELECT
                     it.initiative_id,
                     p.name as person_name,
@@ -2204,8 +2178,7 @@ class CanonicalDataExporter:
                 JOIN persons p ON tm.person_id = p.id
                 JOIN roles r ON tm.role_id = r.id
                 WHERE it.initiative_id IN ({ids_str})
-            """
-            )
+            """)
             try:
                 members_result = session.execute(members_query).fetchall()
 

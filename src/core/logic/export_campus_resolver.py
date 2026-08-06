@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 
 class ExportCampusResolver:
-    """Best-effort campus resolver for export payloads."""
+    """Best-effort campus resolver for export payloads with 3-tier student cascade."""
 
     def __init__(self, session: Any, campus_ctrl: Any):
         self.session = session
@@ -17,14 +17,98 @@ class ExportCampusResolver:
         self._campus_by_id: dict[int, dict[str, Any]] = {}
         self._primary_by_entity: dict[tuple[str, int], dict[str, Any]] = {}
 
+        # 3-Tier Student Cascade State
+        self._student_level1_project_campuses: dict[int, Counter[int]] = defaultdict(
+            Counter
+        )
+        self._student_level2_group_campuses: dict[int, Counter[int]] = defaultdict(
+            Counter
+        )
+        self._student_level3_advisor_campuses: dict[int, Counter[int]] = defaultdict(
+            Counter
+        )
+
     def get_campus(self, entity_type: str, entity_id: Any) -> Optional[dict[str, Any]]:
         self._ensure_loaded()
+        if entity_type and str(entity_type).lower() in ("student", "discente", "aluno"):
+            campuses = self.get_student_campuses(entity_id)
+            return dict(campuses[0]) if campuses else None
+
         key = self._normalize_key(entity_type, entity_id)
         if key is None:
             return None
 
         campus = self._primary_by_entity.get(key)
         return dict(campus) if campus else None
+
+    def get_student_campuses(self, entity_id: Any) -> list[dict[str, Any]]:
+        """
+        Returns all resolved campuses for a student using 3-tier priority cascade:
+        1. Projects/Editais
+        2. Research Groups
+        3. Main Academic Advisor
+        """
+        self._ensure_loaded()
+        student_id = self._normalize_int(entity_id)
+        if student_id is None:
+            return []
+
+        # Tier 1: Projects / Editais
+        c1 = self._student_level1_project_campuses.get(student_id)
+        if c1:
+            return self._order_campuses(c1)
+
+        # Tier 2: Research Groups
+        c2 = self._student_level2_group_campuses.get(student_id)
+        if c2:
+            return self._order_campuses(c2)
+
+        # Tier 3: Main Academic Advisor
+        c3 = self._student_level3_advisor_campuses.get(student_id)
+        if c3:
+            return self._order_campuses(c3)
+
+        return []
+
+    def get_student_resolution_audit(self, entity_id: Any) -> dict[str, Any]:
+        """Returns provenance audit metadata for student campus resolution."""
+        self._ensure_loaded()
+        student_id = self._normalize_int(entity_id)
+        if student_id is None:
+            return {"resolved_via": "unresolved", "confidence": "low"}
+
+        if (
+            student_id in self._student_level1_project_campuses
+            and self._student_level1_project_campuses[student_id]
+        ):
+            return {"resolved_via": "project", "confidence": "high"}
+
+        if (
+            student_id in self._student_level2_group_campuses
+            and self._student_level2_group_campuses[student_id]
+        ):
+            return {"resolved_via": "research_group", "confidence": "medium"}
+
+        if (
+            student_id in self._student_level3_advisor_campuses
+            and self._student_level3_advisor_campuses[student_id]
+        ):
+            return {"resolved_via": "main_advisor", "confidence": "low"}
+
+        return {"resolved_via": "unresolved", "confidence": "low"}
+
+    def _order_campuses(self, counter: Counter[int]) -> list[dict[str, Any]]:
+        if not counter:
+            return []
+        ordered_ids = sorted(
+            counter.items(),
+            key=lambda item: (
+                -item[1],
+                self._campus_by_id[item[0]]["name"],
+                item[0],
+            ),
+        )
+        return [dict(self._campus_by_id[cid]) for cid, _ in ordered_ids]
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -65,15 +149,13 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT it.initiative_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM initiative_teams it
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY it.initiative_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "initiative",
                 row["entity_id"],
@@ -81,8 +163,7 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM advisorships a
             JOIN initiatives i ON i.id = a.id
@@ -90,8 +171,7 @@ class ExportCampusResolver:
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY a.id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "advisorship",
                 row["entity_id"],
@@ -99,32 +179,51 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT tm.person_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM team_members tm
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY tm.person_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "researcher",
                 row["entity_id"],
                 row["campus_id"],
                 row["weight"],
             )
+            # Student Level 2: Research Groups
+            p_id = self._normalize_int(row["entity_id"])
+            c_id = self._normalize_int(row["campus_id"])
+            if p_id and c_id and c_id in self._campus_by_id:
+                self._student_level2_group_campuses[p_id][c_id] += max(
+                    int(row["weight"]), 1
+                )
 
-        for row in self._run_query(
-            """
-            SELECT aa.article_id AS entity_id, rg.campus_id, COUNT(*) AS weight
+        # Student Level 1: Projects / Editais (initiative teams & advisorship initiatives)
+        for row in self._run_query("""
+            SELECT tm.person_id AS student_id, rg.campus_id, COUNT(*) AS weight
+            FROM team_members tm
+            JOIN initiative_teams it ON it.team_id = tm.team_id
+            JOIN research_groups rg ON rg.id = it.team_id
+            WHERE rg.campus_id IS NOT NULL
+            GROUP BY tm.person_id, rg.campus_id
+            """):
+            p_id = self._normalize_int(row["student_id"])
+            c_id = self._normalize_int(row["campus_id"])
+            if p_id and c_id and c_id in self._campus_by_id:
+                self._student_level1_project_campuses[p_id][c_id] += max(
+                    int(row["weight"]), 1
+                )
+
+        for row in self._run_query("""
+            SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM article_authors aa
             JOIN team_members tm ON tm.person_id = aa.researcher_id
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY aa.article_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "article",
                 row["entity_id"],
@@ -132,15 +231,13 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT gka.area_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM group_knowledge_areas gka
             JOIN research_groups rg ON rg.id = gka.group_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY gka.area_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "knowledge_area",
                 row["entity_id"],
@@ -150,8 +247,31 @@ class ExportCampusResolver:
 
         primary_from_direct = self._build_primary_map(campus_counts)
 
-        for row in self._run_query(
-            """
+        # Student Level 3: Main Academic Advisor
+        # Find student-supervisor links
+        advisor_pairs = self._run_query("""
+            SELECT am_std.person_id AS student_id, am_sup.person_id AS supervisor_id
+            FROM advisorship_members am_std
+            JOIN advisorship_members am_sup ON am_sup.advisorship_id = am_std.advisorship_id
+            WHERE am_std.role_name IN ('Student', 'Bolsista', 'Orientando')
+              AND am_sup.role_name IN ('Supervisor', 'Coordinator', 'Orientador', 'Leader')
+            """)
+        if not advisor_pairs:
+            advisor_pairs = self._run_query("""
+                SELECT student_id, supervisor_id
+                FROM advisorships
+                WHERE student_id IS NOT NULL AND supervisor_id IS NOT NULL
+                """)
+
+        for row in advisor_pairs:
+            s_id = self._normalize_int(row.get("student_id"))
+            sup_id = self._normalize_int(row.get("supervisor_id"))
+            if s_id and sup_id:
+                sup_campus = primary_from_direct.get(("researcher", sup_id))
+                if sup_campus and sup_campus.get("id") in self._campus_by_id:
+                    self._student_level3_advisor_campuses[s_id][sup_campus["id"]] += 1
+
+        for row in self._run_query("""
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_matches
             UNION ALL
@@ -161,8 +281,7 @@ class ExportCampusResolver:
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_change_logs
             WHERE source_record_id IS NOT NULL
-            """
-        ):
+            """):
             entity_key = self._normalize_key(
                 row["canonical_entity_type"], row["canonical_entity_id"]
             )
@@ -174,12 +293,10 @@ class ExportCampusResolver:
 
         primary_with_sources = self._build_primary_map(campus_counts)
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT ingestion_run_id AS entity_id, id AS source_record_id
             FROM source_records
-            """
-        ):
+            """):
             source_record_key = self._normalize_key(
                 "source_record", row["source_record_id"]
             )

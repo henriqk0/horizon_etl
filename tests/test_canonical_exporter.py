@@ -178,6 +178,11 @@ def test_export_all_orchestrates_exports():
                     "was_student": False,
                     "was_staff": False,
                     "campus": None,
+                    "campuses": [],
+                    "campus_resolution": {
+                        "resolved_via": "unresolved",
+                        "confidence": "low",
+                    },
                 }
             ]
             assert (
@@ -752,10 +757,15 @@ def test_export_researchers_backfills_participant_only_people_from_projects_and_
             )
         ]
 
+        mock_resolver = MagicMock()
+        mock_resolver.get_campus.return_value = None
+        mock_resolver.get_student_campuses.return_value = []
+        mock_resolver.get_student_resolution_audit.return_value = {
+            "resolved_via": "unresolved",
+            "confidence": "low",
+        }
         exporter._get_session = lambda: None
-        exporter._get_campus_resolver = lambda: MagicMock(
-            get_campus=lambda *_args, **_kwargs: None
-        )
+        exporter._get_campus_resolver = lambda: mock_resolver
         exporter._fetch_researcher_advisorship_rows = lambda _session: []
         exporter._fetch_person_project_roles = lambda _session: {652: ["Student"]}
         exporter._fetch_person_research_group_roles = lambda _session: {}
@@ -809,6 +819,11 @@ def test_export_researchers_backfills_participant_only_people_from_projects_and_
                 "was_student": True,
                 "was_staff": False,
                 "campus": None,
+                "campuses": [],
+                "campus_resolution": {
+                    "resolved_via": "unresolved",
+                    "confidence": "low",
+                },
             }
         ]
         assert (
@@ -1000,3 +1015,70 @@ def test_build_classification_payload_marks_academic_reference_only_note():
     assert payload["classification_confidence"] == "low"
     assert payload["classification_note"] == "academic_advisor_reference_only"
     assert payload["role_evidence"]["academic_reference_count"] == 2
+
+
+def test_export_students_payload_enrichment():
+    mock_sink = MagicMock(spec=IExportSink)
+    exporter = CanonicalDataExporter(sink=mock_sink)
+
+    mock_resolver = MagicMock()
+    mock_resolver.get_student_campuses.return_value = [
+        {"id": 1, "name": "Campus Serra"},
+        {"id": 2, "name": "Campus Vitória"},
+    ]
+    mock_resolver.get_student_resolution_audit.return_value = {
+        "resolved_via": "project",
+        "confidence": "high",
+    }
+    mock_resolver.get_campus.return_value = {"id": 1, "name": "Campus Serra"}
+    exporter._campus_resolver = mock_resolver
+
+    mock_researcher = MagicMock()
+    mock_researcher.to_dict.return_value = {
+        "id": 101,
+        "name": "Maria Student",
+        "advisorships": [],
+        "initiatives": [],
+        "research_groups": [],
+    }
+    exporter.researcher_ctrl.get_all = MagicMock(return_value=[mock_researcher])
+
+    with patch.object(exporter, "_get_session", return_value=MagicMock()), patch.object(
+        exporter, "_fetch_person_project_roles", return_value={}
+    ), patch.object(
+        exporter, "_fetch_person_research_group_roles", return_value={}
+    ), patch.object(
+        exporter,
+        "_fetch_person_advisorship_roles",
+        return_value={101: ["Student"]},
+    ), patch.object(
+        exporter, "_fetch_person_institutional_email_flags", return_value={}
+    ), patch.object(
+        exporter, "_fetch_person_academic_reference_counts", return_value={}
+    ), patch.object(
+        exporter, "_collect_participant_person_ids", return_value=set()
+    ), patch.object(
+        exporter, "_has_tracking_schema", return_value=False
+    ):
+        exporter.export_researchers("output/test_researchers.json")
+
+    # Verify sink call for students_canonical.json
+    export_calls = mock_sink.export.call_args_list
+    student_export_call = [
+        c for c in export_calls if c[0][1].endswith("students_canonical.json")
+    ]
+    assert len(student_export_call) == 1
+    students_data = student_export_call[0][0][0]
+    assert len(students_data) == 1
+    student = students_data[0]
+    assert student["classification"] == "student"
+    assert student["campus"] == {"id": 1, "name": "Campus Serra"}
+    assert student["campuses"] == [
+        {"id": 1, "name": "Campus Serra"},
+        {"id": 2, "name": "Campus Vitória"},
+    ]
+    assert student["campus_resolution"] == {
+        "resolved_via": "project",
+        "confidence": "high",
+    }
+
