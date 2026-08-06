@@ -190,8 +190,10 @@ def _find_person_by_name(name: str, session: Any) -> Optional[Any]:
                     {"pid": row[0]},
                 ).scalar()
                 if is_res:
+
                     class _Match:
                         pass
+
                     m = _Match()
                     m.id, m.name = row[0], row[1]
                     return m
@@ -199,6 +201,7 @@ def _find_person_by_name(name: str, session: Any) -> Optional[Any]:
             # Otherwise, return the first match
             class _Match:
                 pass
+
             m = _Match()
             m.id, m.name = rows[0][0], rows[0][1]
             return m
