@@ -83,33 +83,39 @@ class PersonConsolidator:
             if len(members) < 2:
                 continue
 
-            # Split by identification_id to avoid false positive merges
-            by_id: Dict[str, List[Dict[str, Any]]] = {}
-            for m in members:
-                ident = (m.get("identification_id") or "").strip()
-                by_id.setdefault(ident, []).append(m)
-
-            for ident, ident_group in by_id.items():
-                if len(ident_group) < 2:
-                    continue
-                if not ident:
-                    continue
-
-                ordered = sorted(
-                    ident_group,
-                    key=lambda item: (self._quality_score(item), -int(item["id"])),
-                    reverse=True,
+            # Only attempt a name-only merge when no member carries a strong
+            # identification_id that differs from another member's.
+            # This catches the common case of two records for the same person
+            # where one has a real CPF/email and the other has empty or
+            # name-as-id fields.
+            strong_ids = {
+                (m.get("identification_id") or "").strip()
+                for m in members
+                if self._has_strong_identification(m)
+            }
+            if len(strong_ids) > 1:
+                # Multiple distinct strong IDs → potential homonyms, skip.
+                logger.debug(
+                    f"Skipping name-only merge for '{canonical_name}': "
+                    f"conflicting strong IDs: {strong_ids}"
                 )
-                winner_id = int(ordered[0]["id"])
-                loser_ids = [int(item["id"]) for item in ordered[1:]]
-                duplicate_groups.append(
-                    DuplicateGroup(
-                        canonical_name=canonical_name,
-                        winner_id=winner_id,
-                        loser_ids=loser_ids,
-                        members=ordered,
-                    )
+                continue
+
+            ordered = sorted(
+                members,
+                key=lambda item: (self._quality_score(item), -int(item["id"])),
+                reverse=True,
+            )
+            winner_id = int(ordered[0]["id"])
+            loser_ids = [int(item["id"]) for item in ordered[1:]]
+            duplicate_groups.append(
+                DuplicateGroup(
+                    canonical_name=canonical_name,
+                    winner_id=winner_id,
+                    loser_ids=loser_ids,
+                    members=ordered,
                 )
+            )
 
         return duplicate_groups
 

@@ -36,7 +36,7 @@ def weekly_pipelines_flow(
         "Starting weekly Horizon pipelines with campus filter: %s",
         campus_name or "all",
     )
-    tracker = ProgressTracker(total=4, name="Weekly pipelines")
+    tracker = ProgressTracker(total=5, name="Weekly pipelines")
 
     reporter = ETLFlowReporter(
         output_dir="data/reports",
@@ -49,6 +49,10 @@ def weekly_pipelines_flow(
                 step_name="all_sources",
                 runner=lambda: ingest_all_sources_flow(campus_name=campus_name),
             )
+        with tracker.step("Consolidating duplicate persons"):
+            from src.scripts.consolidate_duplicates import execute as run_consolidate
+
+            run_consolidate("db/horizon.db", "all")
         with tracker.step("Exporting canonical data"):
             reporter.run_step(
                 step_name="export_canonical",

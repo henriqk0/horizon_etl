@@ -100,11 +100,17 @@ class SigPesqResearcherStrategy(ResearcherStrategy):
             all_res = researcher_ctrl.get_all()
             # Email belongs only in `emails`; identification_id is a CPF-like
             # identity column and an email hash there poisons future matching.
+            _session = None
+            try:
+                _session = researcher_ctrl._service._repository._session
+            except Exception:
+                pass
             res = resolve_or_create_researcher(
                 researcher_ctrl,
                 all_res,
                 name=name,
                 emails=[email] if email else None,
+                session=_session,
             )
             if res:
                 return res

@@ -9,11 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from src.scripts.export_parquet import (
-    _find_or_extract_jsons,
-    convert_dir,
-    convert_file,
-)
+from src.scripts.export_parquet import _find_or_extract_jsons, convert_dir, convert_file
 
 EXPORTS_DIR = Path("data/exports")
 
