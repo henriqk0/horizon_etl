@@ -76,7 +76,7 @@ jobs:
           test -n "$HORIZON_TELEGRAM_CHAT_ID" || { echo "Missing GitHub secret: HORIZON_TELEGRAM_CHAT_ID"; exit 1; }
 
       - name: Run weekly flows
-        run: make weekly-flows
+        run: make weekly-flows WEEKLY_CAMPUS=Serra
 
       - name: Upload ETL artifacts
         if: always()

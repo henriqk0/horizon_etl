@@ -26,14 +26,14 @@ from typing import Optional
 from loguru import logger
 
 # (name, app.py argv tail, timeout seconds, critical)
-# Order is load-bearing: SigPesq -> CNPq -> Lattes, then exports, then LGPD.
+# Order is load-bearing: SigPesq -> CNPq -> Lattes, then consolidation, exports, then LGPD.
 _PHASES = [
     ("sigpesq", ["sigpesq"], 3600, True),
     ("cnpq", ["cnpq_sync"], 5400, False),
     ("lattes_download", ["lattes_download"], 5400, False),
     ("lattes_projects", ["ingest_lattes_projects"], 3600, False),
     ("lattes_advisorships", ["lattes_advisorships"], 1800, False),
-    ("consolidate", ["consolidate_duplicates"], 900, False),
+    ("consolidate_duplicates", ["consolidate_duplicates"], 300, False),
     ("export_canonical", ["export_canonical"], 1800, True),
     ("knowledge_areas_mart", ["ka_mart"], 900, False),
     ("initiatives_analytics_mart", ["analytics_mart"], 900, False),
@@ -63,6 +63,8 @@ def _run_phase(name, argv_tail, timeout, campus, output_dir):
             argv.append(campus)
         elif argv_tail[0] == "export_canonical":
             argv.append(output_dir)
+            if campus:
+                argv.append(campus)
     logger.info("▶ phase '{}': {}", name, " ".join(argv[1:]))
     t0 = time.time()
     try:

@@ -42,9 +42,18 @@ class InitiativeLinker:
             pass
 
     def create_initiative_team(
-        self, initiative: Any, project_data: Dict[str, Any]
+        self,
+        initiative: Any,
+        project_data: Dict[str, Any],
+        *,
+        authoritative: bool = True,
     ) -> None:
-        """Creates a team for the given initiative and synchronizes its members."""
+        """Creates a team for the given initiative and synchronizes its members.
+
+        When `authoritative` is False (e.g. per-researcher Lattes CVs that only
+        carry a partial view of a project's team), members are added additively
+        instead of pruning obsolete ones.
+        """
         team_name = initiative.name[:200]
         team = self.team_synchronizer.ensure_team(
             team_name=team_name,
@@ -89,7 +98,10 @@ class InitiativeLinker:
                 members_to_sync.append((p, "Student", start_date))
 
         # 2. Delegate synchronization to TeamSynchronizer
-        self.team_synchronizer.synchronize_members(team.id, members_to_sync)
+        if authoritative:
+            self.team_synchronizer.synchronize_members(team.id, members_to_sync)
+        else:
+            self.team_synchronizer.add_members(team.id, members_to_sync)
 
         # 3. Link team to initiative
         try:

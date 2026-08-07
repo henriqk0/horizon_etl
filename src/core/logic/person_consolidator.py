@@ -83,24 +83,13 @@ class PersonConsolidator:
             if len(members) < 2:
                 continue
 
-            # Only attempt a name-only merge when no member carries a strong
-            # identification_id that differs from another member's.
-            # This catches the common case of two records for the same person
-            # where one has a real CPF/email and the other has empty or
-            # name-as-id fields.
-            strong_ids = {
-                (m.get("identification_id") or "").strip()
-                for m in members
-                if self._has_strong_identification(m)
-            }
-            if len(strong_ids) > 1:
-                # Multiple distinct strong IDs → potential homonyms, skip.
-                logger.debug(
-                    f"Skipping name-only merge for '{canonical_name}': "
-                    f"conflicting strong IDs: {strong_ids}"
-                )
+            # Check for homonyms: 2+ distinct strong identifiers means these
+            # are different people who share the same canonical name.
+            if self._identifier_conflict(members):
                 continue
 
+            # No strong-id conflict: merge all members under canonical name,
+            # including those with empty/weak identifications.
             ordered = sorted(
                 members,
                 key=lambda item: (self._quality_score(item), -int(item["id"])),

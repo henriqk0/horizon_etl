@@ -10,7 +10,14 @@ from .base import ProjectMappingStrategy
 class LattesProjectMappingStrategy(ProjectMappingStrategy):
     """
     Strategy for mapping Lattes JSON project data to canonical domain models.
+
+    Each Lattes CV is a per-researcher view: the researcher only lists their own
+    participation in a project. The team for a project seen from multiple CVs
+    must therefore be updated additively, never pruned, or re-syncs would remove
+    members contributed by other researchers.
     """
+
+    is_authoritative_team_source: bool = False
 
     def __init__(
         self, target_researcher_name: str, researcher_roles: Dict[str, str] = None

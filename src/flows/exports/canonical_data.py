@@ -63,11 +63,13 @@ def export_knowledge_areas_task(output_dir: str):
 
 
 @task(name="export_researchers_task")
-def export_researchers_task(output_dir: str):
-    logger.info("Starting Researchers export...")
+def export_researchers_task(output_dir: str, campus: Optional[str] = None):
+    logger.info(f"Starting Researchers export (Filter: {campus})...")
     sink = JsonSink()
     exporter = CanonicalDataExporter(sink=sink)
-    exporter.export_researchers(os.path.join(output_dir, "researchers_canonical.json"))
+    exporter.export_researchers(
+        os.path.join(output_dir, "researchers_canonical.json"), campus_filter=campus
+    )
 
 
 @task(name="export_researchers_tracking_task")
@@ -302,7 +304,7 @@ def export_canonical_data_flow(
     export_organizations_task(output_dir)
     export_campuses_task(output_dir, campus)
     export_knowledge_areas_task(output_dir)
-    export_researchers_task(output_dir)
+    export_researchers_task(output_dir, campus)
     export_researchers_tracking_task(output_dir)
     export_groups_task(output_dir, campus)
     export_initiatives_task(output_dir)
