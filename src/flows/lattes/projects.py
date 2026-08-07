@@ -123,6 +123,7 @@ def _ingest_researcher_file(
                 researcher_ctrl,
                 all_researchers,
                 name=json_name,
+                session=session,
             )
         if not target_researcher:
             raise RuntimeError(
@@ -511,6 +512,7 @@ def ingest_education_task(
                         researcher_ctrl,
                         all_researchers,
                         name=adv_name,
+                        session=session,
                     )
                     if adv_res:
                         advisor_id = getattr(adv_res, "id")
@@ -524,6 +526,7 @@ def ingest_education_task(
                         researcher_ctrl,
                         all_researchers,
                         name=co_name,
+                        session=session,
                     )
                     if co_res:
                         co_advisor_id = getattr(co_res, "id")

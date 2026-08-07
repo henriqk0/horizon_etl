@@ -36,7 +36,7 @@ PREFECT_DB_SERVICE ?= database
 	export-canonical export-parquet export-knowledge-areas-mart export-initiatives-analytics-mart export-people-graph export-collaboration-graph export-researchers-collaboration-graph export-outside-ifes-collaboration-graph export-null-researchers-collaboration-graph export-students-collaboration-graph export-rg-membership-manifest \
 	anonymize-backfill anonymize-check \
 	test test-coverage lint format format-check ci-check \
-	audit-duplicates validate \
+	audit-duplicates consolidate-duplicates validate \
 	benchmark \
 	status clean \
 	docker-up docker-stop docker-build \
@@ -249,6 +249,9 @@ benchmark: ## Run pipeline benchmarks (RUNS=3, optional: TARGETS, DB_RESET, CLEA
 
 audit-duplicates: ## Audit duplicate candidates in the database
 	@$(PYTHON) src/scripts/audit_duplicates.py
+
+consolidate-duplicates: ## Consolidate duplicate persons in the database (SQLite only)
+	@$(PYTHON) app.py consolidate_duplicates
 
 validate: ## Validate ETL report vs DB row counts and run duplicate audit
 	@$(PYTHON) src/scripts/validate_pipeline.py
