@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StudentsCanonicalExport",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "name", "classification", "campus", "campuses", "campus_resolution"],
+    "properties": {
+      "id": { "type": "integer" },
+      "name": { "type": "string" },
+      "classification": { "type": ["string", "null"] },
+      "classification_confidence": { "type": ["string", "null"] },
+      "campus": {
+        "type": ["object", "null"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" }
+        },
+        "required": ["id", "name"]
+      },
+      "campuses": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "integer" },
+            "name": { "type": "string" }
+          },
+          "required": ["id", "name"]
+        }
+      },
+      "campus_resolution": {
+        "type": "object",
+        "required": ["resolved_via", "confidence"],
+        "properties": {
+          "resolved_via": {
+            "type": "string",
+            "enum": ["project", "research_group", "main_advisor", "unresolved"]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          }
+        }
+      }
+    }
+  }
+}
