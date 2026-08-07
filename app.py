@@ -263,6 +263,12 @@ def main():
             logger.info("Executing Flow: Ingest Lattes Advisorships")
             ingest_lattes_advisorships_flow()
 
+        if flow_to_run == "consolidate_duplicates":
+            from src.scripts.consolidate_duplicates import execute as run_consolidate
+
+            logger.info("Executing: Consolidate Duplicate Persons")
+            run_consolidate("db/horizon.db", "all")
+
         if flow_to_run == "lattes_full":
             logger.info("Executing Flow: Lattes Complete Pipeline")
             lattes_complete_flow()

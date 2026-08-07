@@ -48,7 +48,7 @@ def full_ingestion_pipeline(
     """
     logger = get_run_logger()
     logger.info("Starting Unified Ingestion Pipeline...")
-    tracker = ProgressTracker(total=9, name="Full pipeline")
+    tracker = ProgressTracker(total=10, name="Full pipeline")
     reporter = (
         ETLFlowReporter(output_dir="data/reports", run_name="etl_flow_run")
         if generate_etl_report
@@ -118,6 +118,11 @@ def full_ingestion_pipeline(
                 )
             else:
                 ingest_lattes_advisorships_flow()
+
+        with tracker.step("Consolidating duplicate persons"):
+            from src.scripts.consolidate_duplicates import execute as run_consolidate
+
+            run_consolidate("db/horizon.db", "all")
 
         with tracker.step("Exporting canonical data"):
             export_canonical_data_flow(output_dir=output_dir, campus=campus_name)
