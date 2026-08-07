@@ -90,6 +90,49 @@ def resolve_researcher_by_name(
     return best if best_score > 0 else None
 
 
+def resolve_person_by_name(
+    all_persons: Iterable[Any],
+    *,
+    name: Optional[str],
+    identification_id: Optional[str] = None,
+) -> Optional[Any]:
+    """Find a person among ALL persons (including persons-only rows).
+
+    The `researchers` table only holds joined-table rows for people that became
+    researchers. SigPesq-created students live solely in `persons`; matching them
+    here prevents CNPq/Lattes syncs from minting duplicate researchers.
+    """
+    if not name:
+        return None
+
+    parser = LattesParser()
+    target_norm = parser.normalize_title(name)
+
+    best = None
+    best_score = float("-inf")
+    for person in all_persons:
+        score = 0
+        p_name = getattr(person, "name", None) or ""
+        p_identification = getattr(person, "identification_id", None) or ""
+
+        if (
+            identification_id
+            and p_identification
+            and str(p_identification).casefold() == str(identification_id).casefold()
+        ):
+            score += 200
+        if p_name and p_name.casefold() == name.casefold():
+            score += 150
+        elif parser.normalize_title(p_name) == target_norm:
+            score += 100
+
+        if score > best_score:
+            best = person
+            best_score = score
+
+    return best if best_score > 0 else None
+
+
 def resolve_or_create_researcher(
     researcher_ctrl: Any,
     all_researchers: list[Any],
@@ -97,6 +140,7 @@ def resolve_or_create_researcher(
     name: Optional[str],
     identification_id: Optional[str] = None,
     emails: Optional[list[str]] = None,
+    all_persons: Optional[Iterable[Any]] = None,
 ) -> Optional[Any]:
     researcher = resolve_researcher_by_name(
         all_researchers,
@@ -105,6 +149,18 @@ def resolve_or_create_researcher(
     )
     if researcher:
         return researcher
+
+    # Fall back to persons-only rows (e.g. SigPesq students that never became
+    # researchers). Reusing the existing person consolidates rather than
+    # duplicating; the caller's self-healing backfills the 'researchers' row.
+    if all_persons:
+        person = resolve_person_by_name(
+            all_persons,
+            name=name,
+            identification_id=identification_id,
+        )
+        if person:
+            return person
 
     if not name:
         return None

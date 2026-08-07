@@ -1079,12 +1079,14 @@ class CanonicalDataExporter:
             data, output_path, "Knowledge Areas", entity_type="knowledge_area"
         )
 
-    def export_researchers(self, output_path: str):
+    def export_researchers(self, output_path: str, campus_filter: Optional[str] = None):
         """
         Exports all researchers to a JSON file.
 
         Args:
             output_path (str): The destination file path.
+            campus_filter (Optional[str]): If provided, filter researchers to only those
+                whose resolved campus matches the name (or is null when no campus).
         """
         resolver = self._get_campus_resolver()
         session = self._get_session()
@@ -1601,6 +1603,18 @@ class CanonicalDataExporter:
                 )
             )
             r_dict["campus"] = resolver.get_campus("researcher", p_id_int or p_id)
+
+            if campus_filter:
+                campus_obj = r_dict.get("campus")
+                campus_name = (
+                    campus_obj.get("name", "").strip().lower()
+                    if isinstance(campus_obj, dict)
+                    else ""
+                )
+                filter_lower = campus_filter.strip().lower()
+                # Keep if campus matches the filter OR if campus is null/empty
+                if campus_name and campus_name != filter_lower:
+                    continue
 
             if r_dict.get("identification_id") and not is_anonymized_cpf(
                 r_dict["identification_id"]

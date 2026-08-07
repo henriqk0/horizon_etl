@@ -83,33 +83,28 @@ class PersonConsolidator:
             if len(members) < 2:
                 continue
 
-            # Split by identification_id to avoid false positive merges
-            by_id: Dict[str, List[Dict[str, Any]]] = {}
-            for m in members:
-                ident = (m.get("identification_id") or "").strip()
-                by_id.setdefault(ident, []).append(m)
+            # Check for homonyms: 2+ distinct strong identifiers means these
+            # are different people who share the same canonical name.
+            if self._identifier_conflict(members):
+                continue
 
-            for ident, ident_group in by_id.items():
-                if len(ident_group) < 2:
-                    continue
-                if not ident:
-                    continue
-
-                ordered = sorted(
-                    ident_group,
-                    key=lambda item: (self._quality_score(item), -int(item["id"])),
-                    reverse=True,
+            # No strong-id conflict: merge all members under canonical name,
+            # including those with empty/weak identifications.
+            ordered = sorted(
+                members,
+                key=lambda item: (self._quality_score(item), -int(item["id"])),
+                reverse=True,
+            )
+            winner_id = int(ordered[0]["id"])
+            loser_ids = [int(item["id"]) for item in ordered[1:]]
+            duplicate_groups.append(
+                DuplicateGroup(
+                    canonical_name=canonical_name,
+                    winner_id=winner_id,
+                    loser_ids=loser_ids,
+                    members=ordered,
                 )
-                winner_id = int(ordered[0]["id"])
-                loser_ids = [int(item["id"]) for item in ordered[1:]]
-                duplicate_groups.append(
-                    DuplicateGroup(
-                        canonical_name=canonical_name,
-                        winner_id=winner_id,
-                        loser_ids=loser_ids,
-                        members=ordered,
-                    )
-                )
+            )
 
         return duplicate_groups
 

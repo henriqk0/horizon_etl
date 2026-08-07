@@ -61,6 +61,12 @@ class ResearchGroupMappingStrategy(ABC):
 class ProjectMappingStrategy(ABC):
     """Base interface for Project mapping strategies."""
 
+    #: Whether rows from this source carry the full, authoritative member list
+    #: for an initiative's team. Partial sources (e.g. per-researcher Lattes
+    #: CVs, where each researcher only sees their own participation) must only
+    #: add members and never prune, otherwise re-syncs wipe the team.
+    is_authoritative_team_source: bool = True
+
     @abstractmethod
     def map_row(self, row: dict) -> dict:
         """

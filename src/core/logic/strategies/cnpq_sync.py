@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from typing import Any, Dict, List
 
+from eo_lib import PersonController
 from loguru import logger
 from research_domain import (
     KnowledgeAreaController,
@@ -246,8 +247,12 @@ class CnpqSyncLogic:
         """
         from sqlalchemy import text
 
-        # Fetch all once to avoid N+1 and many session calls
+        # Fetch all once to avoid N+1 and many session calls.
+        # all_persons (including SigPesq students that only exist as persons rows)
+        # lets resolve_or_create_researcher reuse those records instead of minting
+        # a duplicate researcher.
         all_res = self.res_ctrl.get_all()
+        all_persons = PersonController().get_all()
 
         for m_data in members_data:
             name = m_data.get("name")
@@ -269,6 +274,7 @@ class CnpqSyncLogic:
                     self.res_ctrl,
                     all_res,
                     name=name,
+                    all_persons=all_persons,
                 )
 
                 if researcher:

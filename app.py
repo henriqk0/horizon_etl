@@ -273,6 +273,14 @@ def main():
             logger.info("Executing Flow: LGPD PII Anonymize Backfill")
             anonymize_backfill_flow()
 
+        elif flow_to_run == "consolidate_duplicates":
+            from src.scripts.consolidate_duplicates import execute
+
+            logger.info("Executing: Consolidate Duplicate People and References")
+            db_path = "db/horizon.db"
+            result = execute(db_path, "all")
+            logger.info(f"Consolidation complete: {result}")
+
     except Exception as e:
         logger.error(f"Application failed: {e}")
         sys.exit(1)
