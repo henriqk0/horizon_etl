@@ -66,6 +66,17 @@ def ingest_sigpesq_flow() -> None:
 
         logger.info("Persisting SigPesq advisorships...")
         persist_advisorships()
+
+        logger.info("Extracting & enriching SigPesq project PDFs with Mistral AI...")
+        try:
+            from src.flows.sigpesq.extract_projects import extract_projects_flow
+
+            extract_projects_flow(skip_existing=True)
+        except Exception as exc:
+            logger.warning(
+                f"SigPesq project PDF extraction/enrichment skipped or failed: {exc}"
+            )
+
         logger.info("Flow finished successfully.")
 
 
