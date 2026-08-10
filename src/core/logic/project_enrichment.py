@@ -263,9 +263,7 @@ class ProjectEnrichmentLoader:
     def _load_code_index(self) -> Dict[str, int]:
         """``project_code -> initiative_id`` for APPROVED SigPesq projects, using
         the tracking tables as the authoritative code<->initiative link."""
-        rows = self._session.execute(
-            text(
-                """
+        rows = self._session.execute(text("""
                 SELECT sr.raw_payload_json AS payload,
                        aa.canonical_entity_id AS init_id
                 FROM source_records sr
@@ -274,9 +272,7 @@ class ProjectEnrichmentLoader:
                  AND aa.canonical_entity_type = 'initiative'
                 WHERE sr.source_system = 'sigpesq_research_projects'
                   AND sr.source_entity_type = 'initiative'
-                """
-            )
-        ).fetchall()
+                """)).fetchall()
 
         index: Dict[str, int] = {}
         for payload, init_id in rows:
@@ -299,14 +295,12 @@ class ProjectEnrichmentLoader:
         """Returns (normalized_name -> [initiative_id], {initiative_id -> normalized_name})
         for Research Project initiatives only (advisorships excluded)."""
         rows = self._session.execute(
-            text(
-                """
+            text("""
                 SELECT i.id, i.name
                 FROM initiatives i
                 JOIN initiative_types t ON i.initiative_type_id = t.id
                 WHERE t.name = :type_name
-                """
-            ),
+                """),
             {"type_name": RESEARCH_PROJECT_TYPE},
         ).fetchall()
 
@@ -332,21 +326,23 @@ class ProjectEnrichmentLoader:
             {"n": RESEARCH_PROJECT_TYPE},
         ).fetchone()
         type_id = type_row[0] if type_row else 1
-        org_row = self._session.execute(
-            text(
-                """
+        org_row = self._session.execute(text("""
                 SELECT organization_id FROM initiatives
                 WHERE organization_id IS NOT NULL
                 GROUP BY organization_id ORDER BY COUNT(*) DESC LIMIT 1
-                """
-            )
-        ).fetchone()
+                """)).fetchone()
         return (org_row[0] if org_row else None), type_id
 
     # -------------------------------------------------------------- read
     def _read_documents(self, pj_dir: str) -> List[Tuple[str, Dict[str, Any]]]:
         docs: List[Tuple[str, Dict[str, Any]]] = []
-        for path in sorted(glob.glob(os.path.join(pj_dir, "PJ_*.json"))):
+        paths = sorted(
+            set(
+                glob.glob(os.path.join(pj_dir, "**", "*.json"), recursive=True)
+                + glob.glob(os.path.join(pj_dir, "*.json"))
+            )
+        )
+        for path in paths:
             try:
                 with open(path, encoding="utf-8") as fh:
                     docs.append((path, json.load(fh)))
@@ -398,17 +394,19 @@ class ProjectEnrichmentLoader:
             "errors": 0,
         }
 
-        transaction = None if self.dry_run else self._session.begin()
+        if not self.dry_run and not self._session.in_transaction():
+            self._session.begin()
+
         try:
             self._enrich_winners(winners, descriptions, stats)
             if ingest_new:
                 unmatched = [c for c in candidates if c.match is None]
                 stats.update(self._ingest_new(unmatched, name_index))
-            if transaction is not None:
-                transaction.commit()
+            if not self.dry_run and self._session.in_transaction():
+                self._session.commit()
         except Exception:
-            if transaction is not None:
-                transaction.rollback()
+            if not self.dry_run and self._session.in_transaction():
+                self._session.rollback()
             raise
 
         logger.info(

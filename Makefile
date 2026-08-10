@@ -128,6 +128,9 @@ weekly-legacy: db-reset prefect-server ## Reset DB and run weekly flows in a sin
 ingest-sigpesq: prefect-server ## Ingest all SigPesq reports (groups, projects, advisorships)
 	@$(FLOW_PYTHON) app.py sigpesq
 
+etl-sigpesq-projects: prefect-server ## Download SigPesq project PDFs, extract via Mistral AI, and enrich initiatives
+	@$(FLOW_PYTHON) -m src.flows.sigpesq.extract_projects
+
 ingest-lattes-download: prefect-server ## Download Lattes curricula via scriptLattes
 	@$(FLOW_PYTHON) -m src.flows.lattes.download
 

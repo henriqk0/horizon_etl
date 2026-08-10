@@ -48,9 +48,14 @@ class SigPesqAdapter(ISource):
         # Support SIGPESQ_USER as alias for SIGPESQ_USERNAME and vice-versa
         if os.getenv("SIGPESQ_USER") and not os.getenv("SIGPESQ_USERNAME"):
             os.environ["SIGPESQ_USERNAME"] = os.getenv("SIGPESQ_USER")
-
         if os.getenv("SIGPESQ_USERNAME") and not os.getenv("SIGPESQ_USER"):
             os.environ["SIGPESQ_USER"] = os.getenv("SIGPESQ_USERNAME")
+
+        # Support MISTRAL_KEY as alias for MISTRAL_API_KEY and vice-versa
+        if os.getenv("MISTRAL_API_KEY") and not os.getenv("MISTRAL_KEY"):
+            os.environ["MISTRAL_KEY"] = os.getenv("MISTRAL_API_KEY")
+        if os.getenv("MISTRAL_KEY") and not os.getenv("MISTRAL_API_KEY"):
+            os.environ["MISTRAL_API_KEY"] = os.getenv("MISTRAL_KEY")
 
         required_vars = ["SIGPESQ_USERNAME", "SIGPESQ_PASSWORD"]
         missing = [v for v in required_vars if not os.getenv(v)]
@@ -132,7 +137,14 @@ class SigPesqAdapter(ISource):
                 continue
 
             # Non-429 failure or last attempt
-            if os.path.exists(os.path.join(self.download_dir, "research_group")):
+            if (
+                os.path.exists(os.path.join(self.download_dir, "research_group"))
+                or os.path.exists(os.path.join(self.download_dir, "projects"))
+                or (
+                    os.path.exists(self.download_dir)
+                    and any(os.scandir(self.download_dir))
+                )
+            ):
                 logger.warning(
                     "SigpesqReportService failed to download all reports, but proceeding with existing files."
                 )
@@ -140,6 +152,36 @@ class SigPesqAdapter(ISource):
             raise RuntimeError(
                 f"SigpesqReportService failed after {attempt} attempt(s). No fallback data found."
             )
+
+    def download_project_pdfs(
+        self,
+        download_dir: str = "data/raw/sigpesq/projects",
+        file_label: str = "Projeto",
+        limit: int | None = None,
+        skip_existing: bool = True,
+    ) -> bool:
+        """
+        Downloads official project PDF files from SigPesq portal using ProjectFilesDownloadStrategy.
+        """
+        logger.info(f"Starting SigPesq project PDF download into {download_dir}...")
+        self._validate_environment()
+
+        from agent_sigpesq.strategies import ProjectFilesDownloadStrategy
+
+        strategy = ProjectFilesDownloadStrategy(
+            file_label=file_label,
+            limit=limit,
+            skip_existing=skip_existing,
+        )
+
+        original_download_dir = self.download_dir
+        self.download_dir = download_dir
+        try:
+            self._trigger_download(download_strategies=[strategy])
+            logger.info(f"Project PDF download completed into {download_dir}.")
+            return True
+        finally:
+            self.download_dir = original_download_dir
 
     def _patch_browser_factory(self):
         """
