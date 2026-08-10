@@ -144,6 +144,7 @@ def resolve_or_create_researcher(
     identification_id: Optional[str] = None,
     emails: Optional[list[str]] = None,
     all_persons: Optional[Iterable[Any]] = None,
+    session: Any = None,
 ) -> Optional[Any]:
     researcher = resolve_researcher_by_name(
         all_researchers,
@@ -170,11 +171,11 @@ def resolve_or_create_researcher(
 
     # Try to find a matching Person (created by SigPesq via PersonMatcher)
     # and promote them to Researcher so we don't create a duplicate.
-    session = None
-    try:
-        session = researcher_ctrl._service._repository._session
-    except Exception:
-        pass
+    if session is None:
+        try:
+            session = researcher_ctrl._service._repository._session
+        except Exception:
+            pass
     person = _find_person_by_name(name, session)
     if person:
         person_id = getattr(person, "id", None)
