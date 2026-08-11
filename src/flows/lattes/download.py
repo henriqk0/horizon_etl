@@ -695,11 +695,14 @@ def get_researchers_from_db() -> List[Dict]:
         ):
             seen_ids.add(lattes_id)
             result.append({"name": r.name, "lattes_id": lattes_id})
-    
+
     # Lattes profiles of administrative staff
     result.extend(
         [
-            {"name": "Eglalciane de Lyrio tongo Castro", "lattes_id": "1286695973576604"},
+            {
+                "name": "Eglalciane de Lyrio tongo Castro",
+                "lattes_id": "1286695973576604",
+            },
             {"name": "Marcelo Franco de Almeida", "lattes_id": "3326528545654268"},
             {"name": "Geruza Ferreira Martins", "lattes_id": "8819106413417445"},
             {"name": "Emerson Atilio Birchler", "lattes_id": "6630084362240387"},
