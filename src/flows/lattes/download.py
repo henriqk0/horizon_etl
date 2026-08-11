@@ -695,6 +695,20 @@ def get_researchers_from_db() -> List[Dict]:
         ):
             seen_ids.add(lattes_id)
             result.append({"name": r.name, "lattes_id": lattes_id})
+    
+    # Lattes profiles of administrative staff
+    result.extend(
+        [
+            {"name": "Eglalciane de Lyrio tongo Castro", "lattes_id": "1286695973576604"},
+            {"name": "Marcelo Franco de Almeida", "lattes_id": "3326528545654268"},
+            {"name": "Geruza Ferreira Martins", "lattes_id": "8819106413417445"},
+            {"name": "Emerson Atilio Birchler", "lattes_id": "6630084362240387"},
+            {"name": "Sâmela Pedrada Cardoso", "lattes_id": "4586755132358194"},
+            {"name": "Dárcio Leitão Quintas", "lattes_id": "8017989819517663"},
+            {"name": "Elika Capucho Delazare", "lattes_id": "1989148534910367"},
+            {"name": "Wagner Scopel Falcão", "lattes_id": "2924845095994521"},
+        ]
+    )
 
     if len(result) < 20:
         export_path = "data/exports/exports_canonical.zip"
