@@ -4,12 +4,14 @@ import re
 import shutil
 import subprocess
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Dict, List
 
 from loguru import logger
 from prefect import flow, task
+from research_domain.controllers import ResearcherController
 
 from src.core.logic.lattes_generators import LattesConfigGenerator, LattesListGenerator
 from src.notifications.telegram import telegram_flow_state_handlers
@@ -22,6 +24,19 @@ LATTES_FORCE_DOWNLOAD_ENV = "HORIZON_LATTES_FORCE_DOWNLOAD"
 LattesDownloader = Callable[[str, str], None]
 DEFAULT_SCRIPT_WORKERS = 1
 SCRIPT_WORKERS_ENV = "HORIZON_LATTES_SCRIPT_WORKERS"
+LATTES_EXPORT_ZIP_PATH = "data/exports/exports_canonical.zip"
+LATTES_MIN_RESEARCHERS_FALLBACK = 20
+
+ADMIN_STAFF_LATTES_PROFILES = [
+    {"name": "Eglalciane de Lyrio tongo Castro", "lattes_id": "1286695973576604"},
+    {"name": "Marcelo Franco de Almeida", "lattes_id": "3326528545654268"},
+    {"name": "Geruza Ferreira Martins", "lattes_id": "8819106413417445"},
+    {"name": "Emerson Atilio Birchler", "lattes_id": "6630084362240387"},
+    {"name": "Sâmela Pedrada Cardoso", "lattes_id": "4586755132358194"},
+    {"name": "Dárcio Leitão Quintas", "lattes_id": "8017989819517663"},
+    {"name": "Elika Capucho Delazare", "lattes_id": "1989148534910367"},
+    {"name": "Wagner Scopel Falcão", "lattes_id": "2924845095994521"},
+]
 
 
 class ScriptLattesRuntimeError(RuntimeError):
@@ -669,65 +684,58 @@ def _batch_prefetch(
     return [lid for lid in missing_ids if lid not in all_failed]
 
 
+def _extract_lattes_id(researcher) -> str:
+    lattes_id = str(getattr(researcher, "brand_id", "") or "")
+    if not lattes_id or not LATTES_ID_RE.fullmatch(lattes_id):
+        cnpq_url = str(getattr(researcher, "cnpq_url", "") or "")
+        match = LATTES_ID_RE.search(cnpq_url)
+        if match:
+            lattes_id = match.group(0)
+    return lattes_id
+
+
+def _add_unique_profile(result, seen_ids, name, lattes_id) -> None:
+    if not lattes_id or lattes_id in seen_ids:
+        return
+    seen_ids.add(lattes_id)
+    result.append({"name": name, "lattes_id": lattes_id})
+
+
+def _load_historical_lattes_profiles() -> List[Dict[str, str]]:
+    if not os.path.exists(LATTES_EXPORT_ZIP_PATH):
+        return []
+    try:
+        with zipfile.ZipFile(LATTES_EXPORT_ZIP_PATH) as z:
+            with z.open("researchers_canonical.json") as f:
+                historical = json.load(f)
+    except Exception as e:
+        logger.warning(f"Historical export fallback failed: {e}")
+        return []
+    profiles = []
+    for r in historical:
+        match = LATTES_ID_RE.search(str(r.get("cnpq_url") or ""))
+        if match:
+            profiles.append({"name": r["name"], "lattes_id": match.group(0)})
+    return profiles
+
+
 @task
 def get_researchers_from_db() -> List[Dict]:
-    import zipfile
-
-    from research_domain.controllers import ResearcherController
-
-    ctrl = ResearcherController()
-    researchers = ctrl.get_all()
+    researchers = ResearcherController().get_all()
 
     seen_ids: set = set()
-    result: List[Dict] = []
+    result: List[Dict[str, str]] = []
+
     for r in researchers:
-        lattes_id = str(getattr(r, "brand_id", "") or "")
-        if not lattes_id or not LATTES_ID_RE.fullmatch(lattes_id):
-            cnpq_url = str(getattr(r, "cnpq_url", "") or "")
-            match = LATTES_ID_RE.search(cnpq_url)
-            if match:
-                lattes_id = match.group(0)
+        lattes_id = _extract_lattes_id(r)
+        if lattes_id and LATTES_ID_RE.fullmatch(lattes_id):
+            _add_unique_profile(result, seen_ids, r.name, lattes_id)
 
-        if (
-            lattes_id
-            and LATTES_ID_RE.fullmatch(lattes_id)
-            and lattes_id not in seen_ids
-        ):
-            seen_ids.add(lattes_id)
-            result.append({"name": r.name, "lattes_id": lattes_id})
+    result.extend(ADMIN_STAFF_LATTES_PROFILES)
 
-    # Lattes profiles of administrative staff
-    result.extend(
-        [
-            {
-                "name": "Eglalciane de Lyrio tongo Castro",
-                "lattes_id": "1286695973576604",
-            },
-            {"name": "Marcelo Franco de Almeida", "lattes_id": "3326528545654268"},
-            {"name": "Geruza Ferreira Martins", "lattes_id": "8819106413417445"},
-            {"name": "Emerson Atilio Birchler", "lattes_id": "6630084362240387"},
-            {"name": "Sâmela Pedrada Cardoso", "lattes_id": "4586755132358194"},
-            {"name": "Dárcio Leitão Quintas", "lattes_id": "8017989819517663"},
-            {"name": "Elika Capucho Delazare", "lattes_id": "1989148534910367"},
-            {"name": "Wagner Scopel Falcão", "lattes_id": "2924845095994521"},
-        ]
-    )
-
-    if len(result) < 20:
-        export_path = "data/exports/exports_canonical.zip"
-        if os.path.exists(export_path):
-            try:
-                with zipfile.ZipFile(export_path) as z:
-                    with z.open("researchers_canonical.json") as f:
-                        historical = json.load(f)
-                for r in historical:
-                    cnpq_url = str(r.get("cnpq_url") or "")
-                    match = LATTES_ID_RE.search(cnpq_url)
-                    if match and match.group(0) not in seen_ids:
-                        seen_ids.add(match.group(0))
-                        result.append({"name": r["name"], "lattes_id": match.group(0)})
-            except Exception as e:
-                logger.warning(f"Historical export fallback failed: {e}")
+    if len(result) < LATTES_MIN_RESEARCHERS_FALLBACK:
+        for profile in _load_historical_lattes_profiles():
+            _add_unique_profile(result, seen_ids, profile["name"], profile["lattes_id"])
 
     logger.info(f"Found {len(result)} researchers with valid Lattes IDs.")
     return result
