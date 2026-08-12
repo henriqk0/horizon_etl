@@ -7,6 +7,7 @@ from prefect import flow, task
 
 from src.adapters.sinks.json_sink import JsonSink
 from src.core.logic.canonical_exporter import CanonicalDataExporter
+from src.core.logic.export_cache_bootstrapper import ExportCacheBootstrapper
 from src.core.logic.research_group_exporter import ResearchGroupExporter
 from src.flows.exports.null_researchers_collaboration_graph import (
     export_null_researchers_collaboration_graph_flow,
@@ -278,6 +279,12 @@ def zip_exports_task(output_dir: str):
         raise
     size_mb = os.path.getsize(zip_path) / (1024 * 1024)
     logger.info("Exports zipped: {} ({:.1f} MB)", zip_path, size_mb)
+
+
+@task(name="bootstrap_export_cache_task")
+def bootstrap_export_cache_task(target_dir: str = "data/exports") -> dict:
+    bootstrapper = ExportCacheBootstrapper()
+    return bootstrapper.bootstrap(target_dir=target_dir)
 
 
 @flow(name="Export Canonical Data Flow", **telegram_flow_state_handlers())

@@ -114,6 +114,11 @@ def run_weekly(
     campus_name: Optional[str] = None, output_dir: str = "data/exports"
 ) -> int:
     """Run every weekly phase in its own subprocess. Returns a process exit code."""
+    from src.core.logic.export_cache_bootstrapper import ExportCacheBootstrapper
+
+    logger.info("Initializing export cache bootstrap...")
+    ExportCacheBootstrapper().bootstrap(target_dir=output_dir)
+
     campus = (campus_name or "").strip()
     results = []
     total_start = time.time()
