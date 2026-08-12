@@ -119,7 +119,13 @@ class SigPesqAdapter(ISource):
                 self._attach_http_429_logging(service, rate_limited)
                 return await service.run()
 
-            success = asyncio.run(run_agent())
+            try:
+                success = asyncio.run(run_agent())
+            except Exception as exc:
+                logger.warning(
+                    f"SigpesqReportService connection attempt {attempt} failed: {exc}"
+                )
+                success = False
 
             if success:
                 return
@@ -137,6 +143,7 @@ class SigPesqAdapter(ISource):
                 continue
 
             # Non-429 failure or last attempt
+            extracted_json_dir = "data/exports/project_sigpesq_files_json"
             if (
                 os.path.exists(os.path.join(self.download_dir, "research_group"))
                 or os.path.exists(os.path.join(self.download_dir, "projects"))
@@ -144,9 +151,13 @@ class SigPesqAdapter(ISource):
                     os.path.exists(self.download_dir)
                     and any(os.scandir(self.download_dir))
                 )
+                or (
+                    os.path.exists(extracted_json_dir)
+                    and any(os.scandir(extracted_json_dir))
+                )
             ):
                 logger.warning(
-                    "SigpesqReportService failed to download all reports, but proceeding with existing files."
+                    "SigpesqReportService failed to download all reports, but proceeding with existing fallback files."
                 )
                 return
             raise RuntimeError(

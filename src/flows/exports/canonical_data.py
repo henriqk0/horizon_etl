@@ -266,7 +266,7 @@ def zip_exports_task(output_dir: str):
         with zipfile.ZipFile(tmp_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for root, _dirs, files in os.walk(output_dir):
                 for fname in files:
-                    if fname in skip_names:
+                    if fname.endswith(".zip") or fname in skip_names:
                         continue
                     fpath = os.path.join(root, fname)
                     arcname = os.path.relpath(fpath, output_dir)

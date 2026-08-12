@@ -56,8 +56,9 @@ EXPECTED_TOP_LEVEL = {
 SUBGRAPH_DIR = "research_group_relationship_graphs"
 
 
-def _validate_zip(archive_path: str) -> list[str]:
+def _validate_zip(archive_path: str) -> tuple[list[str], list[str]]:
     errors = []
+    warnings = []
     with ZipFile(archive_path) as zf:
         names = zf.namelist()
         top_level = {n.rstrip("/") for n in names if "/" not in n and n}
@@ -74,20 +75,25 @@ def _validate_zip(archive_path: str) -> list[str]:
             n for n in names if n.startswith(f"{SUBGRAPH_DIR}/") and n.endswith(".json")
         ]
         if not sub_files:
-            errors.append(f"No JSON files found in {SUBGRAPH_DIR}/")
-
-        if "research_group_relationship_graphs_manifest.json" in names:
-            manifest = json.loads(
-                zf.read("research_group_relationship_graphs_manifest.json")
+            warnings.append(
+                f"No JSON files found in {SUBGRAPH_DIR}/ (optional subgraph)"
             )
-            manifest_count = len(manifest["graphs"])
-            if manifest_count != len(sub_files):
-                errors.append(
-                    f"Relationship manifest lists {manifest_count} graphs, "
-                    f"but {SUBGRAPH_DIR}/ has {len(sub_files)} files"
-                )
 
-    return errors
+        if "research_group_relationship_graphs_manifest.json" in names and sub_files:
+            try:
+                manifest = json.loads(
+                    zf.read("research_group_relationship_graphs_manifest.json")
+                )
+                manifest_count = len(manifest.get("graphs", []))
+                if manifest_count != len(sub_files):
+                    warnings.append(
+                        f"Relationship manifest lists {manifest_count} graphs, "
+                        f"but {SUBGRAPH_DIR}/ has {len(sub_files)} files"
+                    )
+            except Exception:
+                pass
+
+    return errors, warnings
 
 
 def _clean_symlinks(output_path: Path) -> None:
@@ -101,7 +107,9 @@ def _clean_symlinks(output_path: Path) -> None:
                 pass
 
 
-def create_export_zip(output_dir: str, dry_run: bool = False) -> str:
+def create_export_zip(
+    output_dir: str, dry_run: bool = False, clean_loose: bool = False
+) -> str:
     output_path = Path(output_dir).resolve()
 
     _clean_symlinks(output_path)
@@ -120,7 +128,10 @@ def create_export_zip(output_dir: str, dry_run: bool = False) -> str:
         print(f"[DRY RUN] Would create {archive_path} with {len(json_files)} files:")
         for f in json_files:
             print(f"  {f.relative_to(output_path)}")
-        print(f"[DRY RUN] Would then delete these {len(json_files)} loose files")
+        if clean_loose:
+            print(f"[DRY RUN] Would then delete these {len(json_files)} loose files")
+        else:
+            print("[DRY RUN] Loose files would be retained.")
         return str(archive_path)
 
     print(f"Creating {archive_path} with {len(json_files)} files...")
@@ -132,29 +143,36 @@ def create_export_zip(output_dir: str, dry_run: bool = False) -> str:
 
     print(f"Archive created: {archive_path}")
 
-    errors = _validate_zip(str(archive_path))
+    errors, warnings = _validate_zip(str(archive_path))
+    if warnings:
+        print("ZIP validation warnings:")
+        for w in warnings:
+            print(f"  - WARNING: {w}")
+
     if errors:
         print("ZIP validation errors:")
         for e in errors:
-            print(f"  - {e}")
+            print(f"  - ERROR: {e}")
         archive_path.unlink()
-        print(f"Archive deleted due to validation failures.")
+        print("Archive deleted due to validation failures.")
         return ""
 
-    for f in json_files:
-        f.unlink()
+    if clean_loose:
+        for f in json_files:
+            f.unlink()
 
-    for dirpath, dirnames, filenames in os.walk(output_path, topdown=False):
-        if dirpath == str(output_path):
-            continue
-        try:
-            os.rmdir(dirpath)
-        except OSError:
-            pass
+        for dirpath, dirnames, filenames in os.walk(output_path, topdown=False):
+            if dirpath == str(output_path):
+                continue
+            try:
+                os.rmdir(dirpath)
+            except OSError:
+                pass
 
-    _clean_symlinks(output_path)
-
-    print(f"Loose JSON files removed. Only {archive_name} remains.")
+        _clean_symlinks(output_path)
+        print(f"Loose JSON files removed. Only {archive_name} remains.")
+    else:
+        print(f"Loose JSON files retained. Archive {archive_name} created.")
 
     return str(archive_path)
 
@@ -169,13 +187,20 @@ def main():
         action="store_true",
         help="Show what would be done without making changes",
     )
+    parser.add_argument(
+        "--clean-loose",
+        action="store_true",
+        help="Remove loose JSON files after creating the zip archive",
+    )
     args = parser.parse_args()
 
     if not os.path.isdir(args.output_dir):
         print(f"Error: {args.output_dir} is not a valid directory.", file=sys.stderr)
         sys.exit(1)
 
-    result = create_export_zip(args.output_dir, dry_run=args.dry_run)
+    result = create_export_zip(
+        args.output_dir, dry_run=args.dry_run, clean_loose=args.clean_loose
+    )
     if not result:
         sys.exit(0)
 
