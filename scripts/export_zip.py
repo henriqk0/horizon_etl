@@ -2,7 +2,6 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
@@ -120,8 +119,7 @@ def create_export_zip(
         print(f"No JSON files found in {output_path}; nothing to zip.")
         return ""
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    archive_name = f"canonical_export_{ts}.zip"
+    archive_name = "export.zip"
     archive_path = output_path / archive_name
 
     if dry_run:

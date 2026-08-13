@@ -7,6 +7,9 @@ EXPORTS_DIR = Path("data/exports")
 
 
 def _resolve_zip() -> Path:
+    export_zip = EXPORTS_DIR / "export.zip"
+    if export_zip.exists():
+        return export_zip
     ts_zips = sorted(p for p in EXPORTS_DIR.glob("canonical_export_*.zip"))
     if ts_zips:
         return ts_zips[-1]
@@ -14,7 +17,8 @@ def _resolve_zip() -> Path:
     if fallback.exists():
         return fallback
     raise FileNotFoundError(
-        "No canonical_export_*.zip or exports_canonical.zip found " f"in {EXPORTS_DIR}"
+        "No export.zip, canonical_export_*.zip or exports_canonical.zip found "
+        f"in {EXPORTS_DIR}"
     )
 
 

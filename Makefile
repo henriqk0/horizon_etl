@@ -314,7 +314,7 @@ status: ## Show database and export status
 	@echo "Database:"
 	@ls -lh db/horizon.db 2>/dev/null || echo "  not initialized"
 	@echo "Exports:"
-	@ls -lh $(OUTPUT_DIR)/canonical_export_*.zip 2>/dev/null | wc -l | xargs -I {} echo "  {} canonical export(s)"
+	@ls -lh $(OUTPUT_DIR)/export.zip 2>/dev/null | wc -l | xargs -I {} echo "  {} export.zip"
 	@echo "Last pipeline log:"
 	@ls -lt logs/pipeline_*.log 2>/dev/null | head -1 || echo "  no logs found"
 

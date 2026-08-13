@@ -448,8 +448,14 @@ class ProjectLoader:
 
         # 4. Linkages
         if initiative:
-            # Team synchronization
-            self.linker.create_initiative_team(initiative, project_data)
+            # Team synchronization. Lattes rows only carry a per-researcher
+            # partial view, so they add members without pruning the team.
+            authoritative = getattr(
+                self.mapping_strategy, "is_authoritative_team_source", True
+            )
+            self.linker.create_initiative_team(
+                initiative, project_data, authoritative=authoritative
+            )
             stats["teams"] += 1
 
             # Research Group linkage

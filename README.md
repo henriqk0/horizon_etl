@@ -228,7 +228,7 @@ Artefatos locais relevantes:
 
 - `db/horizon.db`: banco SQLite local gerado pela execucao.
 - `data/raw/`: arquivos brutos baixados das fontes.
-- `data/exports/`: arquivo ZIP unico por execucao (`canonical_export_<YYYYMMDD_HHMMSS>.zip`) contendo todos os JSONs canonicos, grafos e marts.
+- `data/exports/`: arquivo ZIP unico por execucao (`export.zip`) contendo todos os JSONs canonicos, grafos e marts.
 - `data/reports/`: relatorios de auditoria e conciliacao.
 - `logs/`: logs locais de pipeline.
 
@@ -236,10 +236,10 @@ Artefatos locais relevantes:
 
 Cada pipeline (`make full-refresh`, `make weekly-flows`, `make pipeline`,
 `make export-canonical`) produz automaticamente um ZIP unico em
-`data/exports/canonical_export_<YYYYMMDD_HHMMSS>.zip` com o seguinte conteudo:
+`data/exports/export.zip` com o seguinte conteudo:
 
 ```text
-canonical_export_<timestamp>.zip
+export.zip
 |-- organizations_canonical.json
 |-- campuses_canonical.json
 |-- knowledge_areas_canonical.json

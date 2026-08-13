@@ -1043,22 +1043,23 @@ def test_export_students_payload_enrichment():
     }
     exporter.researcher_ctrl.get_all = MagicMock(return_value=[mock_researcher])
 
-    with patch.object(exporter, "_get_session", return_value=MagicMock()), patch.object(
-        exporter, "_fetch_person_project_roles", return_value={}
-    ), patch.object(
-        exporter, "_fetch_person_research_group_roles", return_value={}
-    ), patch.object(
-        exporter,
-        "_fetch_person_advisorship_roles",
-        return_value={101: ["Student"]},
-    ), patch.object(
-        exporter, "_fetch_person_institutional_email_flags", return_value={}
-    ), patch.object(
-        exporter, "_fetch_person_academic_reference_counts", return_value={}
-    ), patch.object(
-        exporter, "_collect_participant_person_ids", return_value=set()
-    ), patch.object(
-        exporter, "_has_tracking_schema", return_value=False
+    with (
+        patch.object(exporter, "_get_session", return_value=MagicMock()),
+        patch.object(exporter, "_fetch_person_project_roles", return_value={}),
+        patch.object(exporter, "_fetch_person_research_group_roles", return_value={}),
+        patch.object(
+            exporter,
+            "_fetch_person_advisorship_roles",
+            return_value={101: ["Student"]},
+        ),
+        patch.object(
+            exporter, "_fetch_person_institutional_email_flags", return_value={}
+        ),
+        patch.object(
+            exporter, "_fetch_person_academic_reference_counts", return_value={}
+        ),
+        patch.object(exporter, "_collect_participant_person_ids", return_value=set()),
+        patch.object(exporter, "_has_tracking_schema", return_value=False),
     ):
         exporter.export_researchers("output/test_researchers.json")
 
@@ -1081,4 +1082,3 @@ def test_export_students_payload_enrichment():
         "resolved_via": "project",
         "confidence": "high",
     }
-
