@@ -73,6 +73,13 @@ class ResearchGroupExporter:
             all_campuses = self.campus_ctrl.get_all()
             campus_map = {c.id: {"id": c.id, "name": c.name} for c in all_campuses}
 
+            if not campus_map and any(getattr(g, "campus_id", None) for g in groups):
+                logger.warning(
+                    "Research groups reference campus ids but the campuses table is "
+                    "empty ({} groups); exported 'campus' values will be null.",
+                    len(groups),
+                )
+
             logger.info("Enriching data...")
             enriched_data = []
 
