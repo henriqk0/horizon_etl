@@ -11,7 +11,8 @@ Armazena os arquivos brutos baixados das fontes, principalmente SigPesq e Lattes
 Contem um arquivo ZIP unico por execucao com todos os JSONs canonicos, grafos e
 marts gerados pelo pipeline. O ZIP e produzido automaticamente ao final de cada
 pipeline (`make full-refresh`, `make weekly-flows`, `make pipeline`,
-`make export-canonical`) com o nome `canonical_export_<YYYYMMDD_HHMMSS>.zip`.
+`make export-canonical`) com o nome `export.zip`. Se um `export.zip` ja existe
+em `data/exports`, ele e sobrescrito.
 
 Antes da compactacao, o script `scripts/export_zip.py`:
 1. Remove grafos relacionais de grupos da execucao anterior.

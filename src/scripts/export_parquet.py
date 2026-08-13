@@ -130,26 +130,29 @@ def _find_or_extract_jsons(src: str) -> str:
     """Return a directory with ``*.json`` files.
 
     If loose JSON files exist in *src* they are used directly.
-    Otherwise the most recent ``canonical_export_*.zip`` in *src* is
-    extracted to a temporary directory and that path is returned.
+    Otherwise ``export.zip`` in *src* is extracted to a temporary directory
+    and that path is returned. For backward compatibility, if ``export.zip``
+    is absent the most recent ``canonical_export_*.zip`` is used instead.
     The caller is responsible for cleaning up the temporary directory.
     """
     jsons = sorted(glob.glob(os.path.join(src, "*.json")))
     if jsons:
         return src
 
-    zips = sorted(
-        glob.glob(os.path.join(src, "canonical_export_*.zip")),
-        key=os.path.getmtime,
-        reverse=True,
-    )
-    if not zips:
-        logger.warning(
-            "No JSON files or canonical ZIP archives found in {}.", src
+    export_zip = os.path.join(src, "export.zip")
+    if os.path.exists(export_zip):
+        archive = export_zip
+    else:
+        zips = sorted(
+            glob.glob(os.path.join(src, "canonical_export_*.zip")),
+            key=os.path.getmtime,
+            reverse=True,
         )
-        return ""
+        if not zips:
+            logger.warning("No JSON files or export.zip archive found in {}.", src)
+            return ""
+        archive = zips[0]
 
-    archive = zips[0]
     logger.info("No loose JSONs found — extracting {} …", os.path.basename(archive))
     tmp = tempfile.mkdtemp(prefix="export_parquet_")
     with zipfile.ZipFile(archive) as zf:

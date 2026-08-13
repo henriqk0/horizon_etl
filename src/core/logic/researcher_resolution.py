@@ -144,6 +144,7 @@ def resolve_or_create_researcher(
     identification_id: Optional[str] = None,
     emails: Optional[list[str]] = None,
     all_persons: Optional[Iterable[Any]] = None,
+    session: Any = None,
 ) -> Optional[Any]:
     researcher = resolve_researcher_by_name(
         all_researchers,

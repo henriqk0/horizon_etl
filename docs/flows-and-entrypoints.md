@@ -68,7 +68,7 @@ O `full_ingestion_pipeline` coordena, em alto nivel:
 
 Ao final de cada pipeline, o `app.py` chama automaticamente o script
 `scripts/export_zip.py` para compactar todos os JSONs gerados em um unico ZIP
-com timestamp (`canonical_export_<YYYYMMDD_HHMMSS>.zip`).
+`export.zip`, sobrescrevendo um ZIP anterior de mesmo nome.
 
 O processo de geracao inclui:
 

@@ -14,6 +14,18 @@ from src.scripts.export_parquet import _find_or_extract_jsons, convert_dir, conv
 EXPORTS_DIR = Path("data/exports")
 
 
+def _resolve_zip() -> Path:
+    export_zip = EXPORTS_DIR / "export.zip"
+    if export_zip.exists():
+        return export_zip
+    ts_zips = sorted(p for p in EXPORTS_DIR.glob("canonical_export_*.zip"))
+    if ts_zips:
+        return ts_zips[-1]
+    raise FileNotFoundError(
+        f"No export.zip or canonical_export_*.zip found in {EXPORTS_DIR}"
+    )
+
+
 def _is_noneish(v):
     return v is None or (isinstance(v, float) and math.isnan(v))
 
@@ -107,10 +119,8 @@ def test_roundtrip_all_files() -> None:
 
 def test_fallback_to_zip_no_loose_jsons(tmp_path: Path) -> None:
     """_find_or_extract_jsons extracts the ZIP when no loose JSONs exist."""
-    ts_zips = sorted(EXPORTS_DIR.glob("canonical_export_*.zip"))
-    assert ts_zips, f"No ZIPs in {EXPORTS_DIR}"
-
-    shutil.copy2(ts_zips[-1], tmp_path / ts_zips[-1].name)
+    export_zip = _resolve_zip()
+    shutil.copy2(export_zip, tmp_path / export_zip.name)
 
     result = _find_or_extract_jsons(str(tmp_path))
     assert result != str(tmp_path)
@@ -122,10 +132,9 @@ def test_fallback_to_zip_no_loose_jsons(tmp_path: Path) -> None:
 
 def test_fallback_with_loose_jsons(tmp_path: Path) -> None:
     """_find_or_extract_jsons returns src when loose JSONs exist."""
-    ts_zips = sorted(EXPORTS_DIR.glob("canonical_export_*.zip"))
-    assert ts_zips
+    export_zip = _resolve_zip()
 
-    with zipfile.ZipFile(ts_zips[-1]) as zf:
+    with zipfile.ZipFile(export_zip) as zf:
         members = [n for n in zf.namelist() if n.endswith(".json") and "/" not in n]
         for name in members[:3]:
             (tmp_path / name).write_text(zf.read(name).decode())

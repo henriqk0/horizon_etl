@@ -149,13 +149,15 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT it.initiative_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM initiative_teams it
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY it.initiative_id, rg.campus_id
-            """):
+            """
+        ):
             add_campus(
                 "initiative",
                 row["entity_id"],
@@ -163,7 +165,8 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM advisorships a
             JOIN initiatives i ON i.id = a.id
@@ -171,7 +174,8 @@ class ExportCampusResolver:
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY a.id, rg.campus_id
-            """):
+            """
+        ):
             add_campus(
                 "advisorship",
                 row["entity_id"],
@@ -179,13 +183,15 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT tm.person_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM team_members tm
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY tm.person_id, rg.campus_id
-            """):
+            """
+        ):
             add_campus(
                 "researcher",
                 row["entity_id"],
@@ -201,14 +207,16 @@ class ExportCampusResolver:
                 )
 
         # Student Level 1: Projects / Editais (initiative teams & advisorship initiatives)
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT tm.person_id AS student_id, rg.campus_id, COUNT(*) AS weight
             FROM team_members tm
             JOIN initiative_teams it ON it.team_id = tm.team_id
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY tm.person_id, rg.campus_id
-            """):
+            """
+        ):
             p_id = self._normalize_int(row["student_id"])
             c_id = self._normalize_int(row["campus_id"])
             if p_id and c_id and c_id in self._campus_by_id:
@@ -216,14 +224,16 @@ class ExportCampusResolver:
                     int(row["weight"]), 1
                 )
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM article_authors aa
             JOIN team_members tm ON tm.person_id = aa.researcher_id
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY aa.article_id, rg.campus_id
-            """):
+            """
+        ):
             add_campus(
                 "article",
                 row["entity_id"],
@@ -231,13 +241,15 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT gka.area_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM group_knowledge_areas gka
             JOIN research_groups rg ON rg.id = gka.group_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY gka.area_id, rg.campus_id
-            """):
+            """
+        ):
             add_campus(
                 "knowledge_area",
                 row["entity_id"],
@@ -249,19 +261,23 @@ class ExportCampusResolver:
 
         # Student Level 3: Main Academic Advisor
         # Find student-supervisor links
-        advisor_pairs = self._run_query("""
+        advisor_pairs = self._run_query(
+            """
             SELECT am_std.person_id AS student_id, am_sup.person_id AS supervisor_id
             FROM advisorship_members am_std
             JOIN advisorship_members am_sup ON am_sup.advisorship_id = am_std.advisorship_id
             WHERE am_std.role_name IN ('Student', 'Bolsista', 'Orientando')
               AND am_sup.role_name IN ('Supervisor', 'Coordinator', 'Orientador', 'Leader')
-            """)
+            """
+        )
         if not advisor_pairs:
-            advisor_pairs = self._run_query("""
+            advisor_pairs = self._run_query(
+                """
                 SELECT student_id, supervisor_id
                 FROM advisorships
                 WHERE student_id IS NOT NULL AND supervisor_id IS NOT NULL
-                """)
+                """
+            )
 
         for row in advisor_pairs:
             s_id = self._normalize_int(row.get("student_id"))
@@ -271,7 +287,8 @@ class ExportCampusResolver:
                 if sup_campus and sup_campus.get("id") in self._campus_by_id:
                     self._student_level3_advisor_campuses[s_id][sup_campus["id"]] += 1
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_matches
             UNION ALL
@@ -281,7 +298,8 @@ class ExportCampusResolver:
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_change_logs
             WHERE source_record_id IS NOT NULL
-            """):
+            """
+        ):
             entity_key = self._normalize_key(
                 row["canonical_entity_type"], row["canonical_entity_id"]
             )
@@ -293,10 +311,12 @@ class ExportCampusResolver:
 
         primary_with_sources = self._build_primary_map(campus_counts)
 
-        for row in self._run_query("""
+        for row in self._run_query(
+            """
             SELECT ingestion_run_id AS entity_id, id AS source_record_id
             FROM source_records
-            """):
+            """
+        ):
             source_record_key = self._normalize_key(
                 "source_record", row["source_record_id"]
             )
