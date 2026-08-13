@@ -25,6 +25,15 @@ def get_groups_to_sync(
     logger = get_run_logger()
     logger.info("Fetching research groups with CNPq URLs...")
 
+    try:
+        from src.core.logic.canonical_database_seeder import (
+            CanonicalDatabaseSeeder,
+        )
+
+        CanonicalDatabaseSeeder().seed_research_groups_if_empty()
+    except Exception as exc:
+        logger.warning(f"Failed to seed research groups from canonical export: {exc}")
+
     rg_ctrl = ResearchGroupController()
     all_groups = rg_ctrl.get_all()
 
@@ -337,8 +346,11 @@ def sync_cnpq_groups_flow(
     ):
         groups = get_groups_to_sync(campus_name=campus_name)
 
+        from src.core.logic.provenance_tracker import ProvenanceTracker
+
         if not groups:
             logger.warning("No groups to synchronize.")
+            ProvenanceTracker.set_provenance("cnpq", "VAZIO")
             return {"total_groups": 0, "success_count": 0, "failed_count": 0}
 
         all_results = []
@@ -370,6 +382,14 @@ def sync_cnpq_groups_flow(
 
         success_count = sum(1 for r in all_results if r.get("success"))
         summary = build_cnpq_sync_summary(all_results)
+
+        if success_count == len(groups):
+            ProvenanceTracker.set_provenance("cnpq", "LIVE")
+        elif success_count > 0:
+            ProvenanceTracker.set_provenance("cnpq", "PARCIAL")
+        else:
+            ProvenanceTracker.set_provenance("cnpq", "ZIP ANTERIOR")
+
         logger.info(
             f"Flow finished. Successfully synchronized {success_count}/{len(groups)} groups."
         )

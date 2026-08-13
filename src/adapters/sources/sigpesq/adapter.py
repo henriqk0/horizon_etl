@@ -159,6 +159,12 @@ class SigPesqAdapter(ISource):
                 logger.warning(
                     "SigpesqReportService failed to download all reports, but proceeding with existing fallback files."
                 )
+                try:
+                    from src.core.logic.provenance_tracker import ProvenanceTracker
+
+                    ProvenanceTracker.set_provenance("sigpesq", "ZIP ANTERIOR")
+                except Exception:
+                    pass
                 return
             raise RuntimeError(
                 f"SigpesqReportService failed after {attempt} attempt(s). No fallback data found."

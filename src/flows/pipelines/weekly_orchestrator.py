@@ -75,12 +75,16 @@ def _run_phase(name, argv_tail, timeout, campus, output_dir):
     ok = rc == 0
     log = logger.info if ok else logger.error
     log("phase '{}' finished: {}", name, _describe_rc(rc))
+    from src.core.logic.provenance_tracker import ProvenanceTracker
+
+    origin = ProvenanceTracker.get_provenance(name, output_dir)
     return {
         "name": name,
         "ok": ok,
         "rc": rc,
         "critical": bool(argv_tail and _critical(name)),
         "elapsed": elapsed,
+        "origin": origin,
     }
 
 
@@ -98,8 +102,9 @@ def _notify(results, crit_failed, total_elapsed):
     lines = [head, ""]
     for r in results:
         mark = "✓" if r["ok"] else "✗"
+        origin_tag = f" [{r.get('origin', 'LIVE')}]"
         lines.append(
-            f"{mark} {r['name']} — {_describe_rc(r['rc'])} ({r['elapsed']:.0f}s)"
+            f"{mark} {r['name']}{origin_tag} — {_describe_rc(r['rc'])} ({r['elapsed']:.0f}s)"
         )
     lines.append(f"\nTempo total: {total_elapsed:.0f}s")
     if crit_failed:
@@ -129,14 +134,15 @@ def run_weekly(
     failed = [r for r in results if not r["ok"]]
     crit_failed = [r for r in failed if r["critical"]]
 
-    width = 56
+    width = 68
     print(f"\n{'=' * width}")
     print("  Weekly pipelines — Summary")
     print(f"{'=' * width}")
     for i, r in enumerate(results, 1):
         flag = "✓" if r["ok"] else "✗"
+        origin_tag = f"[{r.get('origin', 'LIVE')}]"
         print(
-            f"  Step {i:>2}  {flag}  {r['name']:.<{width - 20}s}"
+            f"  Step {i:>2}  {flag}  {r['name']:.<32s} {origin_tag:<16s}"
             f" {r['elapsed']:>6.1f}s"
         )
     print(f"{'─' * width}")
