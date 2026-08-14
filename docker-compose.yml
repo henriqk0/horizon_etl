@@ -55,6 +55,7 @@ services:
       - ./data/exports:/app/data/exports
       - ./data/lattes_json:/app/data/lattes_json
       - ./data/raw:/app/data/raw
+      - ./data/reports:/app/data/reports
       - ./cache:/app/cache
       - ./logs:/app/logs
     depends_on:
