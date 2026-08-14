@@ -55,7 +55,7 @@ def _describe_rc(rc: Optional[int]) -> str:
 
 def _run_phase(name, argv_tail, timeout, campus, output_dir):
     if name == "export_zip":
-        argv = [sys.executable, "scripts/export_zip.py", output_dir]
+        argv = [sys.executable, "scripts/export_zip.py", "--clean-loose", output_dir]
     else:
         argv = [sys.executable, "app.py", *argv_tail]
         # Pass positional args only where app.py expects them.
