@@ -6,6 +6,12 @@ __pycache__/
 data/*
 !data/exports/
 !data/exports/**
+# Report artifacts restored from the export ZIP by ExportCacheBootstrapper
+# on each weekly run (not tracked in git).
+data/exports/jornada_fomento.html
+data/exports/mestrado/ppcomp_base_analitico.pdf
+data/exports/.DS_Store
+data/exports/.*_provenance
 # Qualis reference data (public, no PII) — build input for the weekly
 # docentes/OpenAlex report phases; must be versioned so CI can run them.
 !data/reference/
