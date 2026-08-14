@@ -164,7 +164,7 @@ def test_exporter_handles_empty_list():
 
         # Assert
         mock_ctrl_instance.get_all.assert_called_once()
-        mock_sink.export.assert_not_called()
+        mock_sink.export.assert_called_once_with([], "output.json")
 
 
 def test_exporter_warns_when_campuses_missing_but_groups_reference_them():
