@@ -1,15 +1,72 @@
+import json
 import os
+import zipfile
 
 import pytest
 
 from src.flows.lattes.download import (
     ScriptLattesRuntimeError,
+    _load_historical_lattes_profiles,
     clean_lattes_json_output,
     collect_lattes_ids_from_list,
     download_lattes_flow,
     prefetch_lattes_cache,
     validate_script_lattes_runtime,
 )
+
+
+def test_load_historical_lattes_profiles_reads_loose_canonical(tmp_path, monkeypatch):
+    export_dir = tmp_path / "data" / "exports"
+    export_dir.mkdir(parents=True)
+    canonical = [
+        {"name": "Pablo Rodrigues Muniz", "cnpq_url": "http://lattes.cnpq.br/4404912914498937"},
+        {"name": "No Url Researcher", "cnpq_url": None},
+        {"name": "Adrianna M", "cnpq_url": "http://lattes.cnpq.br/5918972460759215"},
+    ]
+    (export_dir / "researchers_canonical.json").write_text(json.dumps(canonical))
+    monkeypatch.chdir(tmp_path)
+
+    profiles = _load_historical_lattes_profiles()
+
+    assert profiles == [
+        {"name": "Pablo Rodrigues Muniz", "lattes_id": "4404912914498937"},
+        {"name": "Adrianna M", "lattes_id": "5918972460759215"},
+    ]
+
+
+def test_load_historical_lattes_profiles_reads_from_zip(tmp_path, monkeypatch):
+    export_dir = tmp_path / "data" / "exports"
+    export_dir.mkdir(parents=True)
+    canonical = [
+        {"name": "Pablo Rodrigues Muniz", "cnpq_url": "http://lattes.cnpq.br/4404912914498937"},
+        {"name": "No Url Researcher", "cnpq_url": None},
+    ]
+    with zipfile.ZipFile(export_dir / "export.zip", "w") as zf:
+        zf.writestr("researchers_canonical.json", json.dumps(canonical))
+    monkeypatch.chdir(tmp_path)
+
+    profiles = _load_historical_lattes_profiles()
+
+    assert profiles == [
+        {"name": "Pablo Rodrigues Muniz", "lattes_id": "4404912914498937"}
+    ]
+
+
+def test_load_historical_lattes_profiles_handles_data_prefix_in_zip(tmp_path, monkeypatch):
+    export_dir = tmp_path / "data" / "exports"
+    export_dir.mkdir(parents=True)
+    canonical = [
+        {"name": "Pablo Rodrigues Muniz", "cnpq_url": "http://lattes.cnpq.br/4404912914498937"},
+    ]
+    with zipfile.ZipFile(export_dir / "export_merged.zip", "w") as zf:
+        zf.writestr("data/researchers_canonical.json", json.dumps(canonical))
+    monkeypatch.chdir(tmp_path)
+
+    profiles = _load_historical_lattes_profiles()
+
+    assert profiles == [
+        {"name": "Pablo Rodrigues Muniz", "lattes_id": "4404912914498937"}
+    ]
 
 
 def test_clean_lattes_json_output_removes_only_json_files(tmp_path):

@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from itertools import combinations
@@ -57,14 +58,27 @@ class PeopleRelationshipGraphGenerator:
         )
         return result
 
-    def _clean_research_group_graphs(self, output_dir: str) -> None:
+    @staticmethod
+    def _group_id_from_filename(filename: str) -> int | None:
+        match = re.search(r"research_group_(\d+)_relationship_graph\.json", filename)
+        if match:
+            return int(match.group(1))
+        return None
+
+    def _clean_research_group_graphs(
+        self, output_dir: str, regenerate_group_ids: set[int]
+    ) -> None:
         graphs_dir = os.path.join(output_dir, RESEARCH_GROUP_GRAPH_DIRECTORY)
         if os.path.isdir(graphs_dir):
             for fname in os.listdir(graphs_dir):
                 fpath = os.path.join(graphs_dir, fname)
+                if not os.path.isfile(fpath):
+                    continue
+                group_id = self._group_id_from_filename(fname)
+                if group_id is not None and group_id not in regenerate_group_ids:
+                    continue
                 try:
-                    if os.path.isfile(fpath):
-                        os.unlink(fpath)
+                    os.unlink(fpath)
                 except OSError:
                     pass
 
@@ -89,7 +103,16 @@ class PeopleRelationshipGraphGenerator:
             "Generating People Relationship Graph bundle into directory {}", output_dir
         )
 
-        self._clean_research_group_graphs(output_dir)
+        _, _, research_groups = self._build_graph_from_paths(
+            researchers_path=researchers_path,
+            initiatives_path=initiatives_path,
+            research_groups_path=research_groups_path,
+            advisorships_path=advisorships_path,
+        )
+        regenerate_ids = {
+            group.get("id") for group in research_groups if group.get("id") is not None
+        }
+        self._clean_research_group_graphs(output_dir, regenerate_ids)
 
         sources, graph, research_groups = self._build_graph_from_paths(
             researchers_path=researchers_path,
@@ -258,11 +281,13 @@ class PeopleRelationshipGraphGenerator:
     ) -> dict[str, Any]:
         graphs_output_dir = os.path.join(output_dir, RESEARCH_GROUP_GRAPH_DIRECTORY)
         manifest_graphs = []
+        regenerated_group_ids: set[int] = set()
 
         for group in research_groups:
             group_id = group.get("id")
             if group_id is None:
                 continue
+            regenerated_group_ids.add(group_id)
 
             participants = self._unique_people(
                 (
@@ -329,6 +354,14 @@ class PeopleRelationshipGraphGenerator:
                 }
             )
 
+        manifest_graphs.extend(
+            self._manifest_entries_for_preserved_graphs(
+                graphs_output_dir=graphs_output_dir,
+                output_dir=output_dir,
+                regenerated_group_ids=regenerated_group_ids,
+            )
+        )
+
         manifest_payload = {
             "metadata": {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -345,6 +378,59 @@ class PeopleRelationshipGraphGenerator:
             "graphs_directory": graphs_output_dir,
             "graphs": manifest_graphs,
         }
+
+    def _manifest_entries_for_preserved_graphs(
+        self,
+        graphs_output_dir: str,
+        output_dir: str,
+        regenerated_group_ids: set[int],
+    ) -> list[dict[str, Any]]:
+        """Build manifest entries for restored graph files that were preserved
+        on disk for research groups absent from the current canonical export.
+
+        The manifest must list every file that will be packaged, so preserved
+        (non-regenerated) graphs are re-exported into it instead of silently
+        dropping them when the manifest is rebuilt.
+        """
+        entries: list[dict[str, Any]] = []
+        if not os.path.isdir(graphs_output_dir):
+            return entries
+
+        for fname in sorted(os.listdir(graphs_output_dir)):
+            if not fname.endswith(".json"):
+                continue
+            group_id = self._group_id_from_filename(fname)
+            if group_id is None or group_id in regenerated_group_ids:
+                continue
+
+            graph_path = os.path.join(graphs_output_dir, fname)
+            try:
+                with open(graph_path, "r", encoding="utf-8") as file_handle:
+                    payload = json.load(file_handle)
+            except (OSError, ValueError):
+                continue
+            if not isinstance(payload, dict):
+                continue
+
+            scope = (payload.get("metadata") or {}).get("scope") or {}
+            research_group = scope.get("research_group") or {}
+            graph_stats = payload.get("graph_stats") or {}
+            entries.append(
+                {
+                    "id": research_group.get("id"),
+                    "name": research_group.get("name"),
+                    "short_name": research_group.get("short_name"),
+                    "member_count": research_group.get("member_count"),
+                    "expanded_node_count": research_group.get("expanded_node_count"),
+                    "advisorship_neighbor_count": research_group.get(
+                        "advisorship_neighbor_count"
+                    ),
+                    "nodes": graph_stats.get("nodes"),
+                    "edges": graph_stats.get("edges"),
+                    "path": os.path.relpath(graph_path, output_dir),
+                }
+            )
+        return entries
 
     def _find_advisorship_neighbors(
         self, graph: nx.Graph, seed_node_ids: set[int]

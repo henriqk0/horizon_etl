@@ -32,6 +32,7 @@ def test_advisorship_handler_creates_members_with_base_persons(
 
     session = MagicMock()
     session.execute.return_value.scalar.return_value = None
+    session.execute.return_value.all.return_value = []
     person_matcher.person_controller._service._repository._session = session
     initiative_controller._service._repository._session = session
 
@@ -272,6 +273,7 @@ def test_advisorship_handler_sets_cancelled_on_created_advisorship(
     MockFellowshipController.return_value.get_all.return_value = []
     session = MagicMock()
     session.execute.return_value.scalar.return_value = None
+    session.execute.return_value.all.return_value = []
     initiative_controller._service._repository._session = session
     person_matcher.person_controller._service._repository._session = session
 
@@ -298,3 +300,171 @@ def test_advisorship_handler_sets_cancelled_on_created_advisorship(
     assert created.cancelled is True
     assert created.cancellation_date is None
     MockAdvisorshipController.return_value.create.assert_called_once_with(created)
+
+
+@patch("src.core.logic.initiative_handlers.FellowshipController")
+@patch("src.core.logic.initiative_handlers.AdvisorshipController")
+def test_advisorship_handler_skips_resync_when_membership_matches(
+    _MockAdvisorshipController,
+    MockFellowshipController,
+):
+    initiative_controller = MagicMock()
+    person_matcher = MagicMock()
+    entity_manager = MagicMock()
+
+    MockFellowshipController.return_value.get_all.return_value = []
+    session = MagicMock()
+    session.execute.return_value.scalar.return_value = None
+    session.execute.return_value.all.return_value = []
+    initiative_controller._service._repository._session = session
+    person_matcher.person_controller._service._repository._session = session
+
+    handler = AdvisorshipHandler(
+        initiative_controller=initiative_controller,
+        person_matcher=person_matcher,
+        entity_manager=entity_manager,
+    )
+
+    existing_member = MagicMock()
+    existing_member.role_name = "Student"
+    existing_member.person_id = 11
+    existing_member.start_date = None
+
+    initiative = MagicMock()
+    original_members = [existing_member]
+    initiative.members = original_members
+    initiative.add_member = MagicMock()
+
+    person = MagicMock()
+    person.id = 11
+
+    with patch.object(handler, "_coerce_to_person", return_value=person):
+        handler._sync_advisorship_member(
+            initiative,
+            person=person,
+            role_name="Student",
+            start_date=None,
+        )
+
+    initiative.add_member.assert_not_called()
+    assert initiative.members is original_members
+
+
+@patch("src.core.logic.initiative_handlers.FellowshipController")
+@patch("src.core.logic.initiative_handlers.AdvisorshipController")
+def test_advisorship_handler_resyncs_when_membership_changed(
+    _MockAdvisorshipController,
+    MockFellowshipController,
+):
+    initiative_controller = MagicMock()
+    person_matcher = MagicMock()
+    entity_manager = MagicMock()
+
+    MockFellowshipController.return_value.get_all.return_value = []
+    entity_manager.role_controller.get_all.return_value = []
+    session = MagicMock()
+    session.execute.return_value.scalar.return_value = None
+    session.execute.return_value.all.return_value = []
+    initiative_controller._service._repository._session = session
+    person_matcher.person_controller._service._repository._session = session
+
+    handler = AdvisorshipHandler(
+        initiative_controller=initiative_controller,
+        person_matcher=person_matcher,
+        entity_manager=entity_manager,
+    )
+
+    stale_member = MagicMock()
+    stale_member.role_name = "Student"
+    stale_member.person_id = 11
+    stale_member.start_date = None
+
+    initiative = MagicMock()
+    initiative.members = [stale_member]
+    initiative.add_member = MagicMock()
+
+    new_person = MagicMock()
+    new_person.id = 12
+
+    with patch.object(handler, "_coerce_to_person", return_value=new_person):
+        handler._sync_advisorship_member(
+            initiative,
+            person=new_person,
+            role_name="Student",
+            start_date=None,
+        )
+
+    initiative.add_member.assert_called_once()
+    assert initiative.add_member.call_args.kwargs["person"] is new_person
+    assert initiative.add_member.call_args.kwargs["start_date"] is None
+    assert initiative.members == []
+
+
+@patch("src.core.logic.initiative_handlers.FellowshipController")
+@patch("src.core.logic.initiative_handlers.AdvisorshipController")
+def test_advisorship_handler_merges_historical_raw_title_record(
+    MockAdvisorshipController,
+    MockFellowshipController,
+):
+    """An advisorship stored under its raw title must be merged (not duplicated)
+    once a same-named project forces a disambiguated title."""
+    initiative_controller = MagicMock()
+    person_matcher = MagicMock()
+    entity_manager = MagicMock()
+
+    MockFellowshipController.return_value.get_all.return_value = []
+    entity_manager.role_controller.get_all.return_value = []
+
+    session = MagicMock()
+    session.execute.return_value.scalar.return_value = 1  # raw title in use
+    initiative_controller._service._repository._session = session
+    person_matcher.person_controller._service._repository._session = session
+    MockAdvisorshipController.return_value.get_by_id.return_value = MagicMock(
+        spec=Advisorship
+    )
+
+    handler = AdvisorshipHandler(
+        initiative_controller=initiative_controller,
+        person_matcher=person_matcher,
+        entity_manager=entity_manager,
+    )
+
+    raw_title = "Consumo inteligente de energia"
+    disambiguated = "Consumo inteligente de energia | Orientacao Aluno A | 2022"
+
+    historical = MagicMock(spec=Advisorship)
+    historical.id = 777
+
+    # persisted (disambiguated) not found, but the raw title exists historically
+    with (
+        patch.object(
+            handler,
+            "_find_existing_advisorship_by_title",
+            side_effect=lambda name, **kwargs: (
+                historical if name == raw_title else None
+            ),
+        ),
+        patch.object(
+            handler,
+            "_resolve_advisorship_people",
+            return_value=(None, None),
+        ),
+        patch.object(handler, "_handle_advisorship_details"),
+        patch.object(handler, "_sync_advisorship_cancellation"),
+    ):
+        result = handler.create_or_update(
+            project_data={
+                "title": raw_title,
+                "student_names": ["Aluno A"],
+                "start_date": datetime(2022, 1, 1),
+            },
+            existing_initiative=None,
+            initiative_type_name="Advisorship",
+            initiative_type_id=2,
+            organization_id=1,
+        )
+
+    assert result is historical
+    assert result.id == 777
+    MockAdvisorshipController.return_value.update.assert_called()
+    MockAdvisorshipController.return_value.create.assert_not_called()

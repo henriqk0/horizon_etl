@@ -28,6 +28,25 @@ class PersonMatcher:
         self._persons_cache: Dict[str, Person] = {}
         self._emails_cache: Dict[str, Person] = {}
         self._canonical_cache: Dict[str, Person] = {}
+        self._normalized_cache: Dict[str, Person] = {}
+
+    def _register_person_cache(self, name: str, person: Person) -> None:
+        """Registers a person across the name/canonical/normalized caches."""
+        self._persons_cache[name] = person
+        canonical_name = self.canonicalize_name(name)
+        if canonical_name:
+            current = self._canonical_cache.get(canonical_name)
+            if current is None or self._person_quality_score(
+                person
+            ) > self._person_quality_score(current):
+                self._canonical_cache[canonical_name] = person
+        normalized_name = self.normalize_name(name)
+        if normalized_name:
+            current = self._normalized_cache.get(normalized_name)
+            if current is None or self._person_quality_score(
+                person
+            ) > self._person_quality_score(current):
+                self._normalized_cache[normalized_name] = person
 
     def preload_cache(self):
         """
@@ -61,14 +80,7 @@ class PersonMatcher:
                         for e in (getattr(p, "emails", None) or [])
                     ]
                 if name:
-                    self._persons_cache[name] = p
-                    canonical_name = self.canonicalize_name(name)
-                    if canonical_name:
-                        current = self._canonical_cache.get(canonical_name)
-                        if current is None or self._person_quality_score(
-                            p
-                        ) > self._person_quality_score(current):
-                            self._canonical_cache[canonical_name] = p
+                    self._register_person_cache(name, p)
                 for email in emails:
                     if email:
                         self._emails_cache[email.strip().lower()] = p
@@ -212,22 +224,18 @@ class PersonMatcher:
             self._register_email(email, person)
             return person
 
-        # 2. Exact Match in Cache (Normalized)
-        for cached_name, person in self._persons_cache.items():
-            norm_cached = self.normalize_name(cached_name)
-            if norm_cached == normalized_input:
-                self._persons_cache[name] = person
-                self._register_email(email, person)
-                return person
+        # 1.7 Exact normalized match (accents/punctuation/case-folding).
+        if normalized_input and normalized_input in self._normalized_cache:
+            person = self._normalized_cache[normalized_input]
+            self._register_email(email, person)
+            self._persons_cache[name] = person
+            return person
 
-        # 3. Fuzzy Matching in Cache
-        names_in_cache = list(self._persons_cache.keys())
-        if names_in_cache and normalized_input:
-            normalized_to_original = {self.normalize_name(n): n for n in names_in_cache}
-            normalized_list = list(normalized_to_original.keys())
-
+        # 3. Fuzzy Matching in normalized cache
+        normalized_keys = list(self._normalized_cache.keys())
+        if normalized_keys and normalized_input:
             best_norm_match, score = process.extractOne(
-                normalized_input, normalized_list, scorer=fuzz.token_sort_ratio
+                normalized_input, normalized_keys, scorer=fuzz.token_sort_ratio
             )
 
             # Threshold of 90%
@@ -238,11 +246,8 @@ class PersonMatcher:
                         f"Fuzzy match '{best_norm_match}' ignored due to strict matching policy (score: {score})"
                     )
                 else:
-                    original_name = normalized_to_original[best_norm_match]
-                    logger.info(
-                        f"Fuzzy match found: '{name}' matches '{original_name}' (score: {score})"
-                    )
-                    person = self._persons_cache[original_name]
+                    person = self._normalized_cache[best_norm_match]
+                    logger.info(f"Fuzzy match found: '{name}' matches (score: {score})")
                     self._persons_cache[name] = person
                     self._register_email(email, person)
                     return person
@@ -251,13 +256,7 @@ class PersonMatcher:
         try:
             emails = [email] if email else []
             person = self.person_controller.create_person(name=name, emails=emails)
-            self._persons_cache[name] = person
-            if canonical_input:
-                current = self._canonical_cache.get(canonical_input)
-                if current is None or self._person_quality_score(
-                    person
-                ) > self._person_quality_score(current):
-                    self._canonical_cache[canonical_input] = person
+            self._register_person_cache(name, person)
             self._register_email(email, person)
             logger.debug(f"Created person: {name} (emails: {emails})")
             return person

@@ -22,9 +22,9 @@ class ResearchGroupMembershipGraphsManifestGenerator:
 
         if not os.path.isdir(graphs_dir):
             logger.warning(
-                "Graphs directory not found: {}. Skipping manifest.", graphs_dir
+                "Graphs directory not found: {}. Writing empty manifest.", graphs_dir
             )
-            return {
+            manifest = {
                 "metadata": {
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                     "total_groups": 0,
@@ -34,6 +34,12 @@ class ResearchGroupMembershipGraphsManifestGenerator:
                 },
                 "groups": [],
             }
+            atomic_write_json(output_path, manifest, ensure_ascii=False, indent=2)
+            logger.info(
+                "Manifest generated: 0 groups, 0 total nodes, 0 total edges → {}",
+                output_path,
+            )
+            return manifest
 
         entries = []
         for filename in sorted(os.listdir(graphs_dir)):

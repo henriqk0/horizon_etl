@@ -26,11 +26,12 @@ def get_groups_to_sync(
     logger.info("Fetching research groups with CNPq URLs...")
 
     try:
-        from src.core.logic.canonical_database_seeder import (
-            CanonicalDatabaseSeeder,
-        )
+        from src.core.logic.canonical_database_seeder import CanonicalDatabaseSeeder
 
-        CanonicalDatabaseSeeder().seed_research_groups_if_empty()
+        seeder = CanonicalDatabaseSeeder()
+        seeder.seed_research_groups_if_empty()
+        seeder.seed_initiatives_if_empty()
+        seeder.seed_advisorships_if_empty()
     except Exception as exc:
         logger.warning(f"Failed to seed research groups from canonical export: {exc}")
 

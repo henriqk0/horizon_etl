@@ -74,18 +74,20 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
 
         return {
             "title": row.get("title") or "Untitled Advisorship",
+            "parent_title": row.get("title") or None,
+            "create_parent_if_missing": False,
             "status": row.get(
                 "status"
             ),  # Lattes parser standardizes to Active/Concluded
             "start_date": start_date,
             "end_date": end_date,
-            "description": row.get("type_name", ""),
+            "description": row.get("type") or row.get("type_name") or "",
             "coordinator_name": self.advisor_name,  # Preserve original spelling for matching
             "student_names": student_names,
             "research_group_name": None,
             "metadata": {
                 "lattes_nature": row.get("nature"),
-                "advisorship_type": row.get("type_name"),
+                "advisorship_type": row.get("type") or row.get("type_name"),
                 "source_system": "lattes_advisorships",
             },
             "campus_name": None,
@@ -99,7 +101,7 @@ class LattesAdvisorshipMappingStrategy(ProjectMappingStrategy):
                     self.advisor_name,
                     student_name,
                     start_year or end_year,
-                    row.get("type_name"),
+                    row.get("type") or row.get("type_name"),
                 ]
             ),
         }

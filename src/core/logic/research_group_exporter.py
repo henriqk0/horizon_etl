@@ -90,6 +90,8 @@ class ResearchGroupExporter:
                 # Enrich Organization
                 if group.organization_id in org_map:
                     group_dict["organization"] = org_map[group.organization_id]
+                else:
+                    group_dict.setdefault("organization", None)
 
                 # Enrich Campus
                 if group.campus_id in campus_map:

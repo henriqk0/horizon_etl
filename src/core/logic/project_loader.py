@@ -17,7 +17,10 @@ from src.core.logic.initiative_handlers import (
     AdvisorshipHandler,
     StandardProjectHandler,
 )
-from src.core.logic.initiative_identity import get_existing_initiative_identity
+from src.core.logic.initiative_identity import (
+    get_existing_initiative_identity,
+    normalize_text,
+)
 from src.core.logic.initiative_linker import InitiativeLinker
 from src.core.logic.person_matcher import PersonMatcher
 from src.core.logic.team_synchronizer import TeamSynchronizer
@@ -32,6 +35,10 @@ class ProjectLoader:
 
     def __init__(self, mapping_strategy):
         self.mapping_strategy = mapping_strategy
+
+        self._initiatives_cache = None
+        self._existing_by_name: Optional[Dict[str, Any]] = None
+        self._existing_by_identity: Optional[Dict[str, Any]] = None
 
         # Controllers
         self.controller = InitiativeController()
@@ -70,6 +77,9 @@ class ProjectLoader:
         self.initiative_type = self.entity_manager.ensure_initiative_type(
             "Research Project"
         )
+        self.advisorship_type = self.entity_manager.ensure_initiative_type(
+            "Advisorship"
+        )
         self.org_id = self.entity_manager.ensure_organization()
 
     def process_file(self, file_path: str) -> None:
@@ -94,24 +104,27 @@ class ProjectLoader:
         """
         Maps a list of raw dictionary records and orchestrates the UPSERT logic across handlers and linkers.
         """
-        if not hasattr(self, "_initiatives_cache") or self._initiatives_cache is None:
+        if self._existing_by_name is None:
             logger.info("Fetching existing initiatives for UPSERT...")
             self._initiatives_cache = self.controller.get_all()
+            self._existing_by_name = {}
+            for init in self._initiatives_cache:
+                raw_name = getattr(init, "name", None)
+                if not raw_name:
+                    continue
+                self._existing_by_name[normalize_text(raw_name)] = init
+            self._existing_by_identity = {}
+            for init in self._initiatives_cache:
+                identity = get_existing_initiative_identity(init)
+                if identity:
+                    self._existing_by_identity[identity] = init
         else:
             logger.info(
                 f"Using cached initiatives ({len(self._initiatives_cache)} items)."
             )
         existing_initiatives = self._initiatives_cache
-        existing_by_name = {
-            init.name: init
-            for init in existing_initiatives
-            if getattr(init, "name", None)
-        }
-        existing_by_identity = {}
-        for init in existing_initiatives:
-            identity = get_existing_initiative_identity(init)
-            if identity:
-                existing_by_identity[identity] = init
+        existing_by_name = self._existing_by_name
+        existing_by_identity = self._existing_by_identity
 
         self.person_matcher.preload_cache()
         initial_persons_count = len(self.person_matcher._persons_cache)
@@ -315,7 +328,9 @@ class ProjectLoader:
                 title=parent_title,
             )
 
-            if not parent_initiative:
+            if not parent_initiative and project_data.get(
+                "create_parent_if_missing", True
+            ):
                 # Create parent via Standard Handler
                 logger.info(f"Creating parent Research Project: {parent_title}")
 
@@ -346,10 +361,22 @@ class ProjectLoader:
                 )
                 if parent_identity_resolved:
                     existing_by_identity[parent_identity_resolved] = parent_initiative
+            elif not parent_initiative:
+                # Best-effort parent linkage: do not fabricate parent projects
+                # (used by sources like Lattes where only real matches count).
+                logger.debug(
+                    f"Skipping parent creation for {parent_title!r} "
+                    "(best-effort linkage; no existing project matched)"
+                )
 
-            parent_id = parent_initiative.id
+            parent_id = parent_initiative.id if parent_initiative else None
 
         # 3. UPSERT Initiative
+        model_type = (
+            self.advisorship_type
+            if model_class is Advisorship
+            else self.initiative_type
+        )
         existing = self._resolve_existing_initiative(
             existing_by_name=existing_by_name,
             existing_by_identity=existing_by_identity,
@@ -360,8 +387,8 @@ class ProjectLoader:
         initiative = handler.create_or_update(
             project_data=project_data,
             existing_initiative=existing,
-            initiative_type_name=self.initiative_type.name,
-            initiative_type_id=self.initiative_type.id,
+            initiative_type_name=model_type.name,
+            initiative_type_id=model_type.id,
             organization_id=self.org_id,
             parent_id=parent_id,
         )
@@ -489,7 +516,7 @@ class ProjectLoader:
                 return candidate
 
         if title:
-            candidate = existing_by_name.get(title)
+            candidate = existing_by_name.get(normalize_text(title))
             if self._candidate_matches_model(candidate, model_class):
                 if not self._has_conflicting_identity(candidate, identity_key):
                     return candidate
@@ -570,10 +597,21 @@ class ProjectLoader:
             text("SELECT id FROM initiatives WHERE name = :name LIMIT 1"),
             {"name": title},
         ).fetchone()
-        if not row:
+        candidate_id = row[0] if row else None
+        if not candidate_id:
+            # Case-insensitive fallback. Accent folding is already covered by the
+            # normalized-name dict built in ``process_records``, so no full-table
+            # scan is needed here.
+            row = session.execute(
+                text(
+                    "SELECT id FROM initiatives WHERE lower(name) = lower(:name) LIMIT 1"
+                ),
+                {"name": title},
+            ).fetchone()
+            candidate_id = row[0] if row else None
+        if not candidate_id:
             return None
 
-        candidate_id = row[0]
         if model_class is Advisorship:
             try:
                 return self.adv_controller.get_by_id(candidate_id)
@@ -600,9 +638,10 @@ class ProjectLoader:
         if not title or not initiative:
             return
 
-        current = existing_by_name.get(title)
+        normalized_key = normalize_text(title)
+        current = existing_by_name.get(normalized_key)
         if current is None or self._candidate_matches_model(current, model_class):
-            existing_by_name[title] = initiative
+            existing_by_name[normalized_key] = initiative
 
     REJECTED_STATUSES = {"recusado", "reprovado", "negado", "cancelado"}
 

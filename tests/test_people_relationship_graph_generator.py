@@ -288,3 +288,72 @@ def test_people_relationship_graph_generator_exports_filtered_graph_files(tmp_pa
     assert nodes_by_id[1]["is_advisorship_neighbor"] is False
     assert nodes_by_id[3]["is_group_member"] is False
     assert nodes_by_id[3]["is_advisorship_neighbor"] is True
+
+
+def test_generate_all_preserves_restored_graphs_for_absent_groups(tmp_path):
+    """Restored graph files for research groups no longer in the canonical
+    export must survive regeneration AND remain listed in the manifest
+    (previously _clean_research_group_graphs deleted ALL graph files and the
+    rebuilt manifest dropped preserved entries, leaking fallback data)."""
+    paths = _write_sample_inputs(tmp_path, include_null_person=True)
+    output_dir = tmp_path / "exports"
+
+    graphs_dir = output_dir / "research_group_relationship_graphs"
+    graphs_dir.mkdir(parents=True)
+
+    restored = {
+        "id": 999,
+        "name": "Grupo Restaurado",
+        "short_name": "GR",
+        "member_count": 2,
+        "expanded_node_count": 2,
+        "advisorship_neighbor_count": 0,
+    }
+    restored_path = graphs_dir / "research_group_999_relationship_graph.json"
+    restored_path.write_text(
+        json.dumps(
+            {
+                "metadata": {
+                    "generated_at": "2026-01-01T00:00:00+00:00",
+                    "sources": {},
+                    "scope": {
+                        "type": "research_group",
+                        "research_group": restored,
+                    },
+                    "weight_definition": "",
+                    "relation_types": {},
+                },
+                "graph_stats": {"nodes": 2, "edges": 0},
+                "graph": {"nodes": [], "edges": []},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    generator = PeopleRelationshipGraphGenerator()
+    generator.generate_all(
+        researchers_path=str(paths["researchers.json"]),
+        initiatives_path=str(paths["initiatives.json"]),
+        research_groups_path=str(paths["research_groups.json"]),
+        advisorships_path=str(paths["advisorships.json"]),
+        output_dir=str(output_dir),
+    )
+
+    assert restored_path.exists(), "restored graph for absent group was deleted"
+    assert (graphs_dir / "research_group_200_relationship_graph.json").exists()
+
+    manifest = _load_json(
+        output_dir / "research_group_relationship_graphs_manifest.json"
+    )
+    manifest_ids = {g["id"] for g in manifest["graphs"]}
+    assert (
+        999 in manifest_ids
+    ), "restored graph must be listed in manifest so it matches the directory"
+    assert 200 in manifest_ids
+    restored_entry = next(g for g in manifest["graphs"] if g["id"] == 999)
+    assert restored_entry["name"] == "Grupo Restaurado"
+    assert restored_entry["path"] == (
+        "research_group_relationship_graphs/"
+        "research_group_999_relationship_graph.json"
+    )

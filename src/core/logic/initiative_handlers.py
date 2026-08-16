@@ -21,6 +21,15 @@ from src.research_domain_compat import (
 )
 
 
+def _as_date_key(value: Any) -> Any:
+    """Normalize a start_date to a plain date for membership comparison."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    return value
+
+
 class BaseInitiativeHandler(ABC):
     """Base class for handling specific initiative types during ingestion."""
 
@@ -156,9 +165,34 @@ class AdvisorshipHandler(BaseInitiativeHandler):
             project_data,
             current_id=getattr(existing_initiative, "id", None),
         )
+        start_year = None
+        if isinstance(project_data.get("start_date"), (datetime, date)):
+            start_year = project_data["start_date"].year
+        elif isinstance(project_data.get("start_date"), str):
+            start_year = project_data["start_date"][:4]
+        student_name = next(
+            (
+                name
+                for name in (project_data.get("student_names") or [])
+                if isinstance(name, str) and name.strip()
+            ),
+            None,
+        )
         if not existing_initiative:
             existing_initiative = self._find_existing_advisorship_by_title(
-                persisted_title
+                persisted_title,
+                student_name=student_name,
+                start_year=start_year,
+            )
+        if not existing_initiative and persisted_title != title:
+            # Historical records may have been stored under the raw
+            # (pre-disambiguation) title before a same-named project existed
+            # (or vice-versa). Merge into that record instead of creating a
+            # duplicate.
+            existing_initiative = self._find_existing_advisorship_by_title(
+                title,
+                student_name=student_name,
+                start_year=start_year,
             )
 
         if existing_initiative:
@@ -426,6 +460,9 @@ class AdvisorshipHandler(BaseInitiativeHandler):
 
         if advisorship_supports_members_api(initiative):
             members = list(getattr(initiative, "members", []) or [])
+            if self._membership_state_matches(members, person, role_name, start_date):
+                return
+
             retained_members = [
                 member
                 for member in members
@@ -453,6 +490,36 @@ class AdvisorshipHandler(BaseInitiativeHandler):
             setattr(
                 initiative, id_attr, getattr(person, "id", None) if person else None
             )
+
+    @staticmethod
+    def _membership_state_matches(
+        members: list[Any],
+        person: Optional[Any],
+        role_name: str,
+        start_date: Optional[Any],
+    ) -> bool:
+        """True when the members list already matches the desired end state.
+
+        The desired state is: for ``role_name`` exactly one member holding
+        (person.id, start_date), or none when ``person`` is falsy.
+        """
+        target_person_id = getattr(person, "id", None) if person is not None else None
+        target_start = _as_date_key(start_date)
+        saw_target = False
+        for member in members:
+            if getattr(member, "role_name", None) != role_name:
+                continue
+            member_person_id = getattr(member, "person_id", None)
+            if member_person_id is None:
+                member_person_id = getattr(getattr(member, "person", None), "id", None)
+            if (
+                member_person_id == target_person_id
+                and _as_date_key(getattr(member, "start_date", None)) == target_start
+            ):
+                saw_target = True
+            else:
+                return False
+        return saw_target
 
     def _coerce_to_person(self, person: Optional[Any]) -> Optional[Person]:
         if not person:
@@ -511,7 +578,7 @@ class AdvisorshipHandler(BaseInitiativeHandler):
                 """
                 SELECT id
                 FROM initiatives
-                WHERE name = :name
+                WHERE lower(name) = lower(:name)
                   AND id != :current_id
                 LIMIT 1
                 """
@@ -551,29 +618,58 @@ class AdvisorshipHandler(BaseInitiativeHandler):
 
         return f"{title} | Orientacao {' | '.join(suffix_parts)}".strip()
 
-    def _find_existing_advisorship_by_title(self, title: str) -> Optional[Advisorship]:
+    def _find_existing_advisorship_by_title(
+        self,
+        title: str,
+        *,
+        student_name: Optional[str] = None,
+        start_year: Optional[int] = None,
+    ) -> Optional[Advisorship]:
         if not title:
             return None
 
         session = self.initiative_controller._service._repository._session
-        initiative_id = session.execute(
+        rows = session.execute(
             text(
                 """
-                SELECT id
-                FROM initiatives
-                WHERE name = :name
-                LIMIT 1
+                SELECT i.id, i.name
+                FROM initiatives i
+                JOIN advisorships a ON a.id = i.id
+                WHERE lower(i.name) = lower(:name)
+                ORDER BY i.id
                 """
             ),
             {"name": title},
-        ).scalar()
-        if not initiative_id:
+        ).all()
+        if not rows:
             return None
 
+        preferred_id = rows[0][0]
+        if len(rows) > 1 and (student_name or start_year):
+            for row in rows:
+                _, row_name = row
+                if student_name and self._name_matches_student(row_name, student_name):
+                    preferred_id = row[0]
+                    break
+            else:
+                # No exact student match; narrow by year.
+                for row in rows:
+                    _, row_name = row
+                    if start_year and str(start_year) in row_name:
+                        preferred_id = row[0]
+                        break
+        elif len(rows) > 1 and rows[0][1] == title:
+            # A same-named row exists; avoid picking an unrelated project row.
+            preferred_id = rows[0][0]
+
         try:
-            return self.adv_controller.get_by_id(initiative_id)
+            return self.adv_controller.get_by_id(preferred_id)
         except Exception:
             return None
+
+    @staticmethod
+    def _name_matches_student(name: str, student_name: str) -> bool:
+        return bool(student_name) and (student_name.casefold() in name.casefold())
 
     def _handle_advisorship_details(
         self,

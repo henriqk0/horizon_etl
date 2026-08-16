@@ -38,4 +38,9 @@ def atomic_write_json(
     path: str, data: Any, *, indent: int = 4, ensure_ascii: bool = False
 ) -> None:
     """Serialize `data` as JSON and write it to `path` atomically."""
-    atomic_write_text(path, json.dumps(data, indent=indent, ensure_ascii=ensure_ascii))
+    # allow_nan=False makes any stray non-finite float fail loudly instead of
+    # silently writing an invalid literal NaN/Infinity token into the export.
+    atomic_write_text(
+        path,
+        json.dumps(data, indent=indent, ensure_ascii=ensure_ascii, allow_nan=False),
+    )

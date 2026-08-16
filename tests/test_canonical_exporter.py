@@ -532,10 +532,13 @@ def test_export_advisorships_preserves_person_and_supervisor_fields_from_members
             "end_date": None,
             "type": "Scientific Initiation",
             "initiative_type": "Advisorship",
+            "student_id": 452,
+            "student_name": "Aluno A",
             "person_id": 452,
             "person_name": "Aluno A",
             "supervisor_id": 2981,
             "supervisor_name": "Paulo Sergio",
+            "parent_id": None,
             "campus": None,
             "fellowship": None,
         }

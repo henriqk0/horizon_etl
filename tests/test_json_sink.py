@@ -90,3 +90,33 @@ def test_json_sink_export_dicts(tmp_path):
         content = json.load(f)
         assert len(content) == 2
         assert content[0]["name"] == "Dict 1"
+
+
+def test_json_sink_normalizes_non_finite_floats(tmp_path):
+    # NaN/Infinity from pandas read_excel must never leak into the export as
+    # invalid JSON literal tokens.
+    sink = JsonSink()
+    data = [
+        {
+            "id": 1,
+            "score": float("nan"),
+            "vals": [float("inf"), float("-inf"), 2.5, None],
+            "nested": {"site": float("nan")},
+        }
+    ]
+    output_file = tmp_path / "test_output_non_finite.json"
+
+    sink.export(data, str(output_file))
+
+    raw = output_file.read_text(encoding="utf-8")
+    assert "NaN" not in raw
+    assert "Infinity" not in raw
+    assert "-Infinity" not in raw
+
+    parsed = json.loads(raw)
+    assert parsed[0]["score"] is None
+    assert parsed[0]["vals"][0] is None
+    assert parsed[0]["vals"][1] is None
+    assert parsed[0]["vals"][2] == 2.5
+    assert parsed[0]["vals"][3] is None
+    assert parsed[0]["nested"]["site"] is None

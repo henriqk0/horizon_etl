@@ -206,3 +206,98 @@ def test_exporter_warns_when_campuses_missing_but_groups_reference_them():
 
     # Assert
     mock_logger.warning.assert_called_once()
+
+
+def test_exporter_always_emits_organization_key():
+    """The dashboard reads group.organization.name, so the organization key must
+    be present on every group even when the id cannot be resolved."""
+    mock_sink = MagicMock(spec=IExportSink)
+
+    with (
+        patch(
+            "src.core.logic.research_group_exporter.ResearchGroupController"
+        ) as MockRgCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.CampusController"
+        ) as MockCampCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.OrganizationController"
+        ) as MockOrgCtrl,
+    ):
+        mock_org_instance = MockOrgCtrl.return_value
+        mock_org_instance.get_all.return_value = []
+
+        mock_camp_instance = MockCampCtrl.return_value
+        mock_camp_instance.get_all.return_value = []
+
+        mock_group = MagicMock()
+        mock_group.to_dict.return_value = {
+            "id": 10,
+            "name": "G",
+            "organization_id": 1,
+            "campus_id": 2,
+        }
+        mock_group.organization_id = 1
+        mock_group.campus_id = 2
+        mock_group.knowledge_areas = []
+        mock_group.members = []
+
+        mock_rg_instance = MockRgCtrl.return_value
+        mock_rg_instance.get_all.return_value = [mock_group]
+
+        exporter = ResearchGroupExporter(sink=mock_sink)
+
+        # Act
+        exporter.export_all("output.json")
+
+    # Assert
+    exported_data, _output_path = mock_sink.export.call_args[0]
+    assert "organization" in exported_data[0]
+    assert exported_data[0]["organization"] is None
+    assert "campus" in exported_data[0]
+    assert exported_data[0]["campus"] is None
+
+
+def test_exporter_emits_organization_object_when_resolved():
+    mock_sink = MagicMock(spec=IExportSink)
+
+    with (
+        patch(
+            "src.core.logic.research_group_exporter.ResearchGroupController"
+        ) as MockRgCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.CampusController"
+        ) as MockCampCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.OrganizationController"
+        ) as MockOrgCtrl,
+    ):
+        mock_org = MagicMock()
+        mock_org.id = 7
+        mock_org.name = "IFES"
+        MockOrgCtrl.return_value.get_all.return_value = [mock_org]
+
+        MockCampCtrl.return_value.get_all.return_value = []
+
+        mock_group = MagicMock()
+        mock_group.to_dict.return_value = {
+            "id": 10,
+            "name": "G",
+            "organization_id": 7,
+            "campus_id": None,
+        }
+        mock_group.organization_id = 7
+        mock_group.campus_id = None
+        mock_group.knowledge_areas = []
+        mock_group.members = []
+
+        MockRgCtrl.return_value.get_all.return_value = [mock_group]
+
+        exporter = ResearchGroupExporter(sink=mock_sink)
+
+        # Act
+        exporter.export_all("output.json")
+
+    # Assert
+    exported_data, _output_path = mock_sink.export.call_args[0]
+    assert exported_data[0]["organization"] == {"id": 7, "name": "IFES"}

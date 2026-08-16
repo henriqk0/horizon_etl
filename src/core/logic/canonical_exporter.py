@@ -172,14 +172,20 @@ class CanonicalDataExporter:
             SELECT
                 am_sup.supervisor_id,
                 am_std.student_id AS person_id,
+                am_std.student_id AS student_id,
                 a.id,
                 i.name,
                 i.status,
+                i.description,
                 i.start_date,
                 i.end_date,
+                i.parent_id,
                 it.name as type_name,
                 a.type as advisorship_type,
-                p.name as person_name
+                p.name as person_name,
+                p_sup.name as supervisor_name,
+                a.fellowship_id,
+                f.name as fellowship_name
             FROM advisorships a
             JOIN initiatives i ON a.id = i.id
             LEFT JOIN initiative_types it ON i.initiative_type_id = it.id
@@ -196,6 +202,8 @@ class CanonicalDataExporter:
                 WHERE role_name = :supervisor_role
                 GROUP BY advisorship_id
             ) am_sup ON am_sup.advisorship_id = a.id
+            LEFT JOIN persons p_sup ON am_sup.supervisor_id = p_sup.id
+            LEFT JOIN fellowships f ON a.fellowship_id = f.id
             """
         )
         params = {
@@ -216,18 +224,26 @@ class CanonicalDataExporter:
             SELECT
                 a.supervisor_id AS supervisor_id,
                 a.student_id AS person_id,
+                a.student_id AS student_id,
                 a.id,
                 i.name,
                 i.status,
+                i.description,
                 i.start_date,
                 i.end_date,
+                i.parent_id,
                 it.name as type_name,
                 a.type as advisorship_type,
-                p.name as person_name
+                p.name as person_name,
+                p_sup.name as supervisor_name,
+                a.fellowship_id,
+                f.name as fellowship_name
             FROM advisorships a
             JOIN initiatives i ON a.id = i.id
             LEFT JOIN initiative_types it ON i.initiative_type_id = it.id
             LEFT JOIN persons p ON a.student_id = p.id
+            LEFT JOIN persons p_sup ON a.supervisor_id = p_sup.id
+            LEFT JOIN fellowships f ON a.fellowship_id = f.id
             WHERE a.supervisor_id IS NOT NULL
             """
         )
@@ -245,6 +261,7 @@ class CanonicalDataExporter:
                 a.id, i.name, i.status, i.description, i.start_date, i.end_date,
                 a.type as advisorship_type,
                 it.name as initiative_type_name,
+                am_std.student_id AS student_id,
                 am_std.student_id AS person_id, p_std.name as person_name,
                 am_sup.supervisor_id, p_sup.name as supervisor_name,
                 a.fellowship_id,
@@ -299,6 +316,7 @@ class CanonicalDataExporter:
                 a.id, i.name, i.status, i.description, i.start_date, i.end_date,
                 a.type as advisorship_type,
                 it.name as initiative_type_name,
+                a.student_id AS student_id,
                 a.student_id AS person_id, p_std.name as person_name,
                 a.supervisor_id, p_sup.name as supervisor_name,
                 a.fellowship_id,
@@ -1418,6 +1436,23 @@ class CanonicalDataExporter:
                     "id": row_data["id"],
                     "name": row_data["name"],
                     "status": row_data["status"],
+                    "description": row_data.get("description"),
+                    "start_date": (
+                        row_data["start_date"].isoformat()
+                        if hasattr(row_data["start_date"], "isoformat")
+                        else (
+                            str(row_data["start_date"])
+                            if row_data["start_date"]
+                            else None
+                        )
+                    ),
+                    "end_date": (
+                        row_data["end_date"].isoformat()
+                        if hasattr(row_data["end_date"], "isoformat")
+                        else (
+                            str(row_data["end_date"]) if row_data["end_date"] else None
+                        )
+                    ),
                     "start_year": (
                         row_data["start_date"].year
                         if hasattr(row_data["start_date"], "year")
@@ -1438,8 +1473,22 @@ class CanonicalDataExporter:
                     ),
                     "type": row_data["advisorship_type"],
                     "initiative_type": row_data["type_name"],
+                    "student_id": row_data.get("student_id")
+                    or row_data.get("person_id"),
+                    "student_name": row_data["person_name"],
                     "person_id": row_data.get("person_id"),
                     "person_name": row_data["person_name"],
+                    "supervisor_id": row_data["supervisor_id"],
+                    "supervisor_name": row_data.get("supervisor_name"),
+                    "parent_id": row_data.get("parent_id"),
+                    "fellowship": (
+                        {
+                            "id": row_data.get("fellowship_id"),
+                            "name": row_data.get("fellowship_name"),
+                        }
+                        if row_data.get("fellowship_id")
+                        else None
+                    ),
                 }
 
                 if sup_id not in person_advisorships_map:
@@ -2165,10 +2214,13 @@ class CanonicalDataExporter:
                 ),
                 "type": row_data["advisorship_type"],
                 "initiative_type": row_data["initiative_type_name"],
+                "student_id": row_data.get("student_id") or row_data.get("person_id"),
+                "student_name": row_data["person_name"],
                 "person_id": row_data["person_id"],
                 "person_name": row_data["person_name"],
                 "supervisor_id": row_data["supervisor_id"],
                 "supervisor_name": row_data["supervisor_name"],
+                "parent_id": row_data["parent_id"],
                 "campus": resolver.get_campus("advisorship", row_data["id"]),
                 "fellowship": (
                     {

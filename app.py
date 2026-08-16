@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from src.core.logic.pii_session_hook import install_lgpd_session_hooks
+from src.core.logic.sqlite_pragmas import configure_application_sqlite_engines
 from src.flows.all import ingest_all_sources_flow
 from src.flows.cnpq.groups import sync_cnpq_groups_flow
 from src.flows.exports.canonical_data import export_canonical_data_flow
@@ -47,12 +48,13 @@ load_dotenv()
 os.environ.setdefault("PREFECT_API_URL", "http://127.0.0.1:4200/api")
 
 install_lgpd_session_hooks()
+configure_application_sqlite_engines()
 
 
 def _create_export_zip(output_dir: str) -> None:
     try:
         result = subprocess.run(
-            [sys.executable, "scripts/export_zip.py", output_dir],
+            [sys.executable, "scripts/export_zip.py", output_dir, "--keep-on-error"],
             capture_output=True,
             text=True,
         )

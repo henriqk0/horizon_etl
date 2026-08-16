@@ -701,18 +701,56 @@ def _add_unique_profile(result, seen_ids, name, lattes_id) -> None:
     result.append({"name": name, "lattes_id": lattes_id})
 
 
+_HISTORICAL_CANDIDATE_SOURCES = (
+    LATTES_EXPORT_ZIP_PATH,
+    "data/exports/export.zip",
+    "data/exports/export_merged.zip",
+)
+
+
+def _read_historical_researchers() -> list:
+    """Returns the researcher list from the most recent canonical export.
+
+    Prefers the loose ``researchers_canonical.json`` restored by the export
+    cache bootstrapper (and optionally the ``null_`` variant), then falls back
+    to reading the file from candidate ZIP archives when only a compressed
+    export is available. Returns ``[]`` when no usable source is found.
+    """
+    loose_candidates = [
+        Path("data/exports/researchers_canonical.json"),
+        Path("data/exports/null_researchers_canonical.json"),
+    ]
+    for loose in loose_candidates:
+        try:
+            if loose.is_file():
+                with open(loose) as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as exc:
+            logger.warning(f"Historical export fallback failed for {loose}: {exc}")
+
+    for zip_path in _HISTORICAL_CANDIDATE_SOURCES:
+        if not os.path.exists(zip_path):
+            continue
+        try:
+            with zipfile.ZipFile(zip_path) as z:
+                name = next(
+                    n for n in z.namelist() if n.endswith("researchers_canonical.json")
+                )
+                with z.open(name) as f:
+                    data = json.load(f)
+                if isinstance(data, list):
+                    return data
+        except Exception as exc:
+            logger.warning(f"Historical export fallback failed for {zip_path}: {exc}")
+
+    return []
+
+
 def _load_historical_lattes_profiles() -> List[Dict[str, str]]:
-    if not os.path.exists(LATTES_EXPORT_ZIP_PATH):
-        return []
-    try:
-        with zipfile.ZipFile(LATTES_EXPORT_ZIP_PATH) as z:
-            with z.open("researchers_canonical.json") as f:
-                historical = json.load(f)
-    except Exception as e:
-        logger.warning(f"Historical export fallback failed: {e}")
-        return []
     profiles = []
-    for r in historical:
+    for r in _read_historical_researchers():
         match = LATTES_ID_RE.search(str(r.get("cnpq_url") or ""))
         if match:
             profiles.append({"name": r["name"], "lattes_id": match.group(0)})
@@ -733,8 +771,15 @@ def get_researchers_from_db() -> List[Dict]:
 
     result.extend(ADMIN_STAFF_LATTES_PROFILES)
 
-    if len(result) < LATTES_MIN_RESEARCHERS_FALLBACK:
-        for profile in _load_historical_lattes_profiles():
+    historical = _load_historical_lattes_profiles()
+    if len(historical) > len(result):
+        logger.info(
+            "Merging {} historical researchers from canonical export "
+            "(DB produced {}).",
+            len(historical),
+            len(result),
+        )
+        for profile in historical:
             _add_unique_profile(result, seen_ids, profile["name"], profile["lattes_id"])
 
     logger.info(f"Found {len(result)} researchers with valid Lattes IDs.")

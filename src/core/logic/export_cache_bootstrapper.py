@@ -11,7 +11,22 @@ class ExportCacheBootstrapper:
     into the target export directory prior to ingestion pipeline execution.
     """
 
-    DEFAULT_PATTERNS = ("canonical_export_*.zip", "exports_canonical.zip")
+    DEFAULT_PATTERNS = ("canonical_export_*.zip", "exports_canonical.zip", "export.zip")
+
+    @staticmethod
+    def _detect_prefix(namelist: list[str]) -> str:
+        """
+        Returns a common leading directory prefix to strip, e.g. "data/" when
+        the archive was created from the repository root. Returns "" if the
+        entries are already relative to the export directory.
+        """
+        entries = [n.rstrip("/") for n in namelist if n.rstrip("/")]
+        if not entries:
+            return ""
+        first = entries[0].split("/")[0]
+        if all(e.split("/")[0] == first for e in entries):
+            return first + "/"
+        return ""
 
     def find_latest_archive(self, search_dirs: list[str] | None = None) -> Path | None:
         """
@@ -72,7 +87,25 @@ class ExportCacheBootstrapper:
         try:
             with zipfile.ZipFile(archive_path, "r") as zf:
                 namelist = zf.namelist()
-                zf.extractall(target_path)
+                prefix = self._detect_prefix(namelist)
+                if prefix:
+                    logger.info(
+                        "Stripping common '{}' prefix from archive entries", prefix
+                    )
+                for member in zf.namelist():
+                    relative = (member[len(prefix) :] if prefix else member).lstrip("/")
+                    if not relative:
+                        continue
+                    dest = target_path / relative
+                    if not str(dest.resolve()).startswith(str(target_path.resolve())):
+                        logger.warning("Skipping unsafe archive entry: {}", member)
+                        continue
+                    if member.endswith("/"):
+                        dest.mkdir(parents=True, exist_ok=True)
+                        continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    with zf.open(member) as src, open(dest, "wb") as out:
+                        out.write(src.read())
 
             logger.info(
                 "Successfully restored {} files from {} into {}",

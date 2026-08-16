@@ -1,5 +1,6 @@
 import hashlib
 import json
+import math
 import re
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -55,7 +56,24 @@ def _json_default(value: Any) -> Any:
     return str(value)
 
 
+def _nan_to_none(value: Any) -> Any:
+    """Recursively normalize non-finite floats (NaN, +Inf, -Inf) to None.
+
+    pandas ``read_excel()`` produces ``float('nan')`` for empty cells; those
+    values must never be stored in JSON columns because ``json.dumps()`` would
+    re-serialize them as the invalid literal tokens ``NaN``/``Infinity``.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if isinstance(value, dict):
+        return {key: _nan_to_none(nested) for key, nested in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_nan_to_none(item) for item in value]
+    return value
+
+
 def _json_safe(value: Any) -> Any:
+    value = _nan_to_none(value)
     if isinstance(value, dict):
         return {key: _json_safe(nested) for key, nested in value.items()}
     if isinstance(value, (list, tuple, set)):
@@ -86,7 +104,7 @@ def sanitize_payload(payload: Any) -> Any:
         # Also sanitize string values that might contain emails
         if isinstance(payload, str) and EMAIL_PATTERN.search(payload):
             return _redact_email(payload)
-        return payload
+        return _nan_to_none(payload)
 
     sanitized = {}
     for key, value in payload.items():
@@ -110,7 +128,11 @@ def sanitize_payload(payload: Any) -> Any:
                 (
                     sanitize_payload(item)
                     if isinstance(item, dict)
-                    else (_redact_email(item) if isinstance(item, str) else item)
+                    else (
+                        _redact_email(item)
+                        if isinstance(item, str)
+                        else _nan_to_none(item)
+                    )
                 )
                 for item in value
             ]
@@ -118,7 +140,7 @@ def sanitize_payload(payload: Any) -> Any:
             # Also redact emails in string values
             sanitized[key] = _redact_email(value)
         else:
-            sanitized[key] = value
+            sanitized[key] = _nan_to_none(value)
 
     return sanitized
 

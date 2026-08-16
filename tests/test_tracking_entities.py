@@ -21,7 +21,12 @@ from src.tracking.entities import (
     IngestionRun,
     SourceRecord,
 )
-from src.tracking.recorder import TrackingRecorder
+from src.tracking.recorder import (
+    TrackingRecorder,
+    _json_safe,
+    _nan_to_none,
+    sanitize_payload,
+)
 from src.tracking.services import (
     AttributeAssertionService,
     EntityChangeLogService,
@@ -192,3 +197,79 @@ def test_tracking_recorder_finalizes_failed_run_after_session_error():
     persisted_run = session.query(IngestionRun).one()
     assert persisted_run.status == "failed"
     assert "not JSON serializable" in persisted_run.notes
+
+
+def test_nan_to_none_normalizes_non_finite_floats_recursively():
+    value = {
+        "a": float("nan"),
+        "b": {"c": float("inf"), "d": -float("inf"), "e": "ok"},
+        "f": [float("nan"), 3, 2.5],
+        "g": (float("nan"),),
+        "h": {float("nan")},
+    }
+    result = _nan_to_none(value)
+    assert result["a"] is None
+    assert result["b"]["c"] is None
+    assert result["b"]["d"] is None
+    assert result["b"]["e"] == "ok"
+    assert result["f"] == [None, 3, 2.5]
+    assert result["g"] == [None]
+    assert result["h"] == [None]
+
+
+def test_json_safe_normalizes_non_finite_floats():
+    value = {
+        "dt": datetime(2026, 1, 1),
+        "nan": float("nan"),
+        "nested": {"inf": float("inf"), "ok": "texto"},
+    }
+    result = _json_safe(value)
+    assert result["dt"] == "2026-01-01T00:00:00"
+    assert result["nan"] is None
+    assert result["nested"]["inf"] is None
+    assert result["nested"]["ok"] == "texto"
+
+
+def test_sanitize_payload_normalizes_non_finite_floats():
+    value = {
+        "nome": "Grupo",
+        "sigla": float("nan"),
+        "vals": [float("nan"), "texto"],
+        "nested": {"x": float("-inf"), "site": float("nan")},
+    }
+    result = sanitize_payload(value)
+    assert result["nome"] == "Grupo"
+    assert result["sigla"] is None
+    assert result["vals"] == [None, "texto"]
+    assert result["nested"]["x"] is None
+    assert result["nested"]["site"] is None
+
+
+def test_tracking_recorder_stores_none_instead_of_nan():
+    import json
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    recorder = _build_tracking_recorder(session)
+
+    with recorder.run_context(source_system="sigpesq", flow_name="sync_groups"):
+        recorder.record_source_record(
+            source_entity_type="research_group",
+            payload={
+                "nome": "Grupo",
+                "sigla": float("nan"),
+                "extra": {"site": float("nan"), "vals": [float("inf"), 1.5]},
+            },
+            source_record_id="group-nan",
+        )
+
+    persisted = session.query(SourceRecord).one()
+    payload = persisted.raw_payload_json
+    assert payload["sigla"] is None
+    assert payload["extra"]["site"] is None
+    assert payload["extra"]["vals"][0] is None
+    assert payload["extra"]["vals"][1] == 1.5
+    # The stored payload must round-trip through a strict JSON serializer.
+    json.dumps(payload, allow_nan=False)

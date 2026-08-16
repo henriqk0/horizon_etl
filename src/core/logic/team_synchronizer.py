@@ -25,6 +25,23 @@ class TeamSynchronizer:
         self.team_controller = team_controller
         self.roles_cache = roles_cache
         self._teams_cache = None
+        self._teams_by_normalized: Dict[str, Any] = {}
+
+    def _ensure_teams_loaded(self) -> None:
+        if self._teams_cache is None:
+            self._teams_cache = self.team_controller.get_all()
+            self._teams_by_normalized = {}
+            for t in self._teams_cache:
+                t_name = (
+                    t.name
+                    if hasattr(t, "name")
+                    else (t.get("name") if isinstance(t, dict) else "")
+                )
+                if not t_name:
+                    continue
+                key = normalize_text(t_name)
+                if key and key not in self._teams_by_normalized:
+                    self._teams_by_normalized[key] = t
 
     def ensure_team(self, team_name: str, description: str) -> Optional[Any]:
         """
@@ -38,19 +55,11 @@ class TeamSynchronizer:
             Optional[Any]: The existing or newly created Team object, or None if error.
         """
         try:
-            if self._teams_cache is None:
-                self._teams_cache = self.team_controller.get_all()
-            existing_teams = self._teams_cache
+            self._ensure_teams_loaded()
             team_name_key = normalize_text(team_name)
-            for t in existing_teams:
-                t_name = (
-                    t.name
-                    if hasattr(t, "name")
-                    else (t.get("name") if isinstance(t, dict) else "")
-                )
-                if t_name == team_name or normalize_text(t_name) == team_name_key:
-                    logger.debug(f"Team already exists: {team_name[:50]}...")
-                    return t
+            if team_name_key and team_name_key in self._teams_by_normalized:
+                logger.debug(f"Team already exists: {team_name[:50]}...")
+                return self._teams_by_normalized[team_name_key]
 
             team = self.team_controller.create_team(
                 name=team_name, description=description
@@ -59,6 +68,8 @@ class TeamSynchronizer:
             # Add newly created team to cache so subsequent lookups don't reload
             if self._teams_cache is not None:
                 self._teams_cache.append(team)
+            if team_name_key:
+                self._teams_by_normalized.setdefault(team_name_key, team)
             return team
         except Exception as e:
             logger.warning(f"Failed to manage team '{team_name[:50]}': {e}")
