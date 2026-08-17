@@ -149,15 +149,20 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        # An initiative directly attached to a research group's own team
+        # inherits that group's campus. This is now the rare case: spec 014
+        # gave initiative teams ids disjoint from research_groups.id on
+        # purpose (forcing teams.id == initiatives.id had merged unrelated
+        # initiative members into every group's roster), so this join stops
+        # matching for initiatives that own their team. Kept because it is
+        # still the most direct evidence whenever it does match.
+        for row in self._run_query("""
             SELECT it.initiative_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM initiative_teams it
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY it.initiative_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "initiative",
                 row["entity_id"],
@@ -165,17 +170,39 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        # Post-spec-014 path: reach the campus through the PEOPLE on the
+        # initiative's team and the research groups they belong to. Without
+        # this every initiative resolved to no campus at all, which silently
+        # emptied projects and publications out of any campus-filtered view.
+        for row in self._run_query("""
+            SELECT it.initiative_id AS entity_id, rg.campus_id, COUNT(*) AS weight
+            FROM initiative_teams it
+            JOIN team_members itm ON itm.team_id = it.team_id
+            JOIN team_members rgm ON rgm.person_id = itm.person_id
+            JOIN research_groups rg ON rg.id = rgm.team_id
+            WHERE rg.campus_id IS NOT NULL
+            GROUP BY it.initiative_id, rg.campus_id
+            """):
+            add_campus(
+                "initiative",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
+
+        # Advisorships inherit from their sponsoring project's team, routed
+        # through its members for the same reason as above.
+        for row in self._run_query("""
             SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM advisorships a
             JOIN initiatives i ON i.id = a.id
             JOIN initiative_teams it ON it.initiative_id = COALESCE(i.parent_id, i.id)
-            JOIN research_groups rg ON rg.id = it.team_id
+            JOIN team_members itm ON itm.team_id = it.team_id
+            JOIN team_members rgm ON rgm.person_id = itm.person_id
+            JOIN research_groups rg ON rg.id = rgm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY a.id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "advisorship",
                 row["entity_id"],
@@ -183,15 +210,31 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        # Most advisorships have no sponsoring project at all (only SigPesq
+        # supplies that link), so the query above cannot reach them. Their own
+        # supervisor and student are then the available campus evidence.
+        for row in self._run_query("""
+            SELECT am.advisorship_id AS entity_id, rg.campus_id, COUNT(*) AS weight
+            FROM advisorship_members am
+            JOIN team_members rgm ON rgm.person_id = am.person_id
+            JOIN research_groups rg ON rg.id = rgm.team_id
+            WHERE rg.campus_id IS NOT NULL
+            GROUP BY am.advisorship_id, rg.campus_id
+            """):
+            add_campus(
+                "advisorship",
+                row["entity_id"],
+                row["campus_id"],
+                row["weight"],
+            )
+
+        for row in self._run_query("""
             SELECT tm.person_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM team_members tm
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY tm.person_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "researcher",
                 row["entity_id"],
@@ -207,16 +250,14 @@ class ExportCampusResolver:
                 )
 
         # Student Level 1: Projects / Editais (initiative teams & advisorship initiatives)
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT tm.person_id AS student_id, rg.campus_id, COUNT(*) AS weight
             FROM team_members tm
             JOIN initiative_teams it ON it.team_id = tm.team_id
             JOIN research_groups rg ON rg.id = it.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY tm.person_id, rg.campus_id
-            """
-        ):
+            """):
             p_id = self._normalize_int(row["student_id"])
             c_id = self._normalize_int(row["campus_id"])
             if p_id and c_id and c_id in self._campus_by_id:
@@ -224,16 +265,14 @@ class ExportCampusResolver:
                     int(row["weight"]), 1
                 )
 
-        for row in self._run_query(
-            """
-            SELECT a.id AS entity_id, rg.campus_id, COUNT(*) AS weight
+        for row in self._run_query("""
+            SELECT aa.article_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM article_authors aa
             JOIN team_members tm ON tm.person_id = aa.researcher_id
             JOIN research_groups rg ON rg.id = tm.team_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY aa.article_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "article",
                 row["entity_id"],
@@ -241,15 +280,13 @@ class ExportCampusResolver:
                 row["weight"],
             )
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT gka.area_id AS entity_id, rg.campus_id, COUNT(*) AS weight
             FROM group_knowledge_areas gka
             JOIN research_groups rg ON rg.id = gka.group_id
             WHERE rg.campus_id IS NOT NULL
             GROUP BY gka.area_id, rg.campus_id
-            """
-        ):
+            """):
             add_campus(
                 "knowledge_area",
                 row["entity_id"],
@@ -261,23 +298,19 @@ class ExportCampusResolver:
 
         # Student Level 3: Main Academic Advisor
         # Find student-supervisor links
-        advisor_pairs = self._run_query(
-            """
+        advisor_pairs = self._run_query("""
             SELECT am_std.person_id AS student_id, am_sup.person_id AS supervisor_id
             FROM advisorship_members am_std
             JOIN advisorship_members am_sup ON am_sup.advisorship_id = am_std.advisorship_id
             WHERE am_std.role_name IN ('Student', 'Bolsista', 'Orientando')
               AND am_sup.role_name IN ('Supervisor', 'Coordinator', 'Orientador', 'Leader')
-            """
-        )
+            """)
         if not advisor_pairs:
-            advisor_pairs = self._run_query(
-                """
+            advisor_pairs = self._run_query("""
                 SELECT student_id, supervisor_id
                 FROM advisorships
                 WHERE student_id IS NOT NULL AND supervisor_id IS NOT NULL
-                """
-            )
+                """)
 
         for row in advisor_pairs:
             s_id = self._normalize_int(row.get("student_id"))
@@ -287,8 +320,7 @@ class ExportCampusResolver:
                 if sup_campus and sup_campus.get("id") in self._campus_by_id:
                     self._student_level3_advisor_campuses[s_id][sup_campus["id"]] += 1
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_matches
             UNION ALL
@@ -298,8 +330,7 @@ class ExportCampusResolver:
             SELECT source_record_id, canonical_entity_type, canonical_entity_id
             FROM entity_change_logs
             WHERE source_record_id IS NOT NULL
-            """
-        ):
+            """):
             entity_key = self._normalize_key(
                 row["canonical_entity_type"], row["canonical_entity_id"]
             )
@@ -311,12 +342,10 @@ class ExportCampusResolver:
 
         primary_with_sources = self._build_primary_map(campus_counts)
 
-        for row in self._run_query(
-            """
+        for row in self._run_query("""
             SELECT ingestion_run_id AS entity_id, id AS source_record_id
             FROM source_records
-            """
-        ):
+            """):
             source_record_key = self._normalize_key(
                 "source_record", row["source_record_id"]
             )
@@ -367,7 +396,18 @@ class ExportCampusResolver:
         try:
             rows = self.session.execute(text(sql)).fetchall()
         except Exception as exc:
-            logger.debug(f"Campus export query failed: {exc}")
+            # Deliberately a warning, not debug: a failing query here does not
+            # raise, it just yields no campus evidence, so the export still
+            # succeeds while quietly emitting entities with campus=None. A
+            # typo in one of these queries ("SELECT a.id" against a FROM that
+            # never aliased anything `a`) hid that way and blanked the campus
+            # of every article in the export.
+            logger.warning(
+                "Campus export query failed — affected entities will have no "
+                "campus: {}\n{}",
+                exc,
+                sql.strip(),
+            )
             return []
 
         result = []

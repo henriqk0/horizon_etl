@@ -106,6 +106,17 @@ def _clean_symlinks(output_path: Path) -> None:
                 pass
 
 
+class ExportZipValidationError(RuntimeError):
+    """The freshly built archive did not satisfy the export content contract.
+
+    Distinct from "there was nothing to zip", which is a legitimate no-op:
+    this one means an archive WAS produced, failed validation, and was then
+    deleted — leaving no export behind. It has to surface as a non-zero exit
+    or the weekly orchestrator reports the phase as successful while the
+    export is missing.
+    """
+
+
 def create_export_zip(
     output_dir: str, dry_run: bool = False, clean_loose: bool = False
 ) -> str:
@@ -153,7 +164,7 @@ def create_export_zip(
             print(f"  - ERROR: {e}")
         archive_path.unlink()
         print("Archive deleted due to validation failures.")
-        return ""
+        raise ExportZipValidationError("; ".join(errors))
 
     if clean_loose:
         for f in json_files:
@@ -196,9 +207,17 @@ def main():
         print(f"Error: {args.output_dir} is not a valid directory.", file=sys.stderr)
         sys.exit(1)
 
-    result = create_export_zip(
-        args.output_dir, dry_run=args.dry_run, clean_loose=args.clean_loose
-    )
+    try:
+        result = create_export_zip(
+            args.output_dir, dry_run=args.dry_run, clean_loose=args.clean_loose
+        )
+    except ExportZipValidationError as exc:
+        print(f"Error: export archive failed validation: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    # An empty result here means "no JSON files to zip", which is a no-op
+    # rather than a failure (e.g. re-running after --clean-loose already
+    # reduced the directory to the archive itself).
     if not result:
         sys.exit(0)
 
