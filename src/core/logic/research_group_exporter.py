@@ -17,7 +17,7 @@ class ResearchGroupExporter:
         self.campus_ctrl = CampusController()
         self.org_ctrl = OrganizationController()
 
-    def export_all(self, output_path: str, campus_filter: Optional[str] = None) -> None:
+    def export_all(self, output_path: str, campus_filter: Optional[str] = None) -> int:
         """
         Fetches all Research Groups, enriches them with related entity data,
         and exports them to the specified path.
@@ -26,6 +26,11 @@ class ResearchGroupExporter:
         Args:
             output_path: Destination file path.
             campus_filter: Optional name of the campus to filter by (case-insensitive).
+
+        Returns:
+            The number of exported groups with an unresolved institutional
+            affiliation (missing/unknown campus or organization) — see
+            specs/011-research-group-institutional-filtering.
         """
         logger.info("Fetching all Research Groups from database...")
         try:
@@ -35,7 +40,7 @@ class ResearchGroupExporter:
             if not all_groups:
                 logger.warning("No Research Groups found to export.")
                 self.sink.export([], output_path)
-                return
+                return 0
 
             # Filter by Campus if requested
             groups = all_groups
@@ -82,20 +87,25 @@ class ResearchGroupExporter:
 
             logger.info("Enriching data...")
             enriched_data = []
+            unresolved_count = 0
 
             for group in groups:
                 # Base serialization
                 group_dict = group.to_dict()
 
-                # Enrich Organization
-                if group.organization_id in org_map:
-                    group_dict["organization"] = org_map[group.organization_id]
+                # Enrich Organization — only assign a real, resolvable
+                # organization. Never fall back to an arbitrary or fabricated
+                # value: a group's institutional affiliation must be its own
+                # or explicitly marked unresolved (spec 011 FR-004/FR-006).
+                campus_entry = campus_map.get(group.campus_id)
+                org_entry = org_map.get(group.organization_id)
 
-                # Enrich Campus
-                if group.campus_id in campus_map:
-                    group_dict["campus"] = campus_map[group.campus_id]
-                else:
-                    group_dict.setdefault("campus", None)
+                group_dict["campus"] = campus_entry
+                group_dict["organization"] = org_entry
+
+                if not campus_entry or not org_entry:
+                    group_dict["unresolved_institutional_affiliation"] = True
+                    unresolved_count += 1
 
                 # Enrich Knowledge Areas
                 # Assuming lazy loading works (attached session or eager load)
@@ -189,6 +199,15 @@ class ResearchGroupExporter:
             self.sink.export(enriched_data, output_path)
 
             logger.info(f"Export completed successfully to {output_path}")
+            if unresolved_count:
+                logger.warning(
+                    "{} of {} research group(s) exported with unresolved "
+                    "institutional affiliation (missing/unknown campus or organization)",
+                    unresolved_count,
+                    len(groups),
+                )
+
+            return unresolved_count
 
         except Exception as e:
             logger.error(f"Error during export: {e}")

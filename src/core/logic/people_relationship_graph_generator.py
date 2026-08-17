@@ -10,6 +10,7 @@ from loguru import logger
 from networkx.readwrite import json_graph
 
 from src.core.logic.atomic_io import atomic_write_json
+from src.core.logic.graph_edge_capper import cap_node_degree
 
 RELATION_DESCRIPTIONS = {
     "initiative": "People who appear together in the same initiative team.",
@@ -217,7 +218,22 @@ class PeopleRelationshipGraphGenerator:
         sources: dict[str, str],
         scope: Optional[dict[str, Any]] = None,
     ) -> dict[str, Any]:
-        graph_payload = json_graph.node_link_data(graph, edges="edges")
+        cap_result = cap_node_degree(graph)
+        trimmed_graph = cap_result.graph
+        # Per-node degree/weighted_degree (and edge relation_types) were
+        # computed by the caller against the pre-trim edge set; refresh
+        # them here so every value in the serialized payload matches the
+        # graph that's actually being written out.
+        self._finalize_graph(trimmed_graph)
+        logger.info(
+            "Edge cap: {} -> {} edges ({} removed, {:.1f}% reduction) for scope {}",
+            cap_result.original_edge_count,
+            cap_result.trimmed_edge_count,
+            cap_result.removed_edge_count,
+            cap_result.reduction_pct,
+            (scope or {"type": "full"}).get("type"),
+        )
+        graph_payload = json_graph.node_link_data(trimmed_graph, edges="edges")
         return {
             "metadata": {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -230,7 +246,7 @@ class PeopleRelationshipGraphGenerator:
                 ),
                 "relation_types": RELATION_DESCRIPTIONS,
             },
-            "graph_stats": self._build_graph_stats(graph),
+            "graph_stats": self._build_graph_stats(trimmed_graph),
             "graph": graph_payload,
         }
 

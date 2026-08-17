@@ -31,6 +31,10 @@ def test_sync_members_uses_resume_fallback_for_new_researcher():
     logic.res_ctrl._service.create_with_details.return_value = created
     researcher_check_exists = MagicMock()
     researcher_check_exists.scalar.return_value = True
+    # fetchall() must report "no existing Person" so resolve_or_create_researcher's
+    # _find_person_by_name lookup falls through to create_researcher_with_resume_fallback
+    # (the whole point of this test) instead of promoting a spurious mock match.
+    researcher_check_exists.fetchall.return_value = []
     logic.res_ctrl._service._repository._session.execute.return_value = (
         researcher_check_exists
     )
@@ -94,6 +98,11 @@ def test_sync_group_coerces_dict_description_before_update():
 
 
 def test_sync_knowledge_areas_tracks_associations_after_commit(monkeypatch):
+    # sync_knowledge_areas caches knowledge areas on the CLASS (shared across
+    # CnpqSyncLogic instances/groups to avoid an N+1 full-table fetch per
+    # group — see cnpq_sync.py); reset it so this test controls its own
+    # ka_ctrl.get_all() mock instead of reusing another test's cache.
+    CnpqSyncLogic._ka_cache = None
     logic = CnpqSyncLogic()
 
     session = MagicMock()
@@ -125,3 +134,45 @@ def test_sync_knowledge_areas_tracks_associations_after_commit(monkeypatch):
     )
 
     assert events == ["commit", "match", "assert", "change"]
+
+
+def test_sync_knowledge_areas_shares_ka_cache_across_group_instances(monkeypatch):
+    """Regression guard for the N+1 fix: a fresh CnpqSyncLogic() per group
+    (as src/flows/cnpq/groups.py does) must not re-fetch the whole
+    knowledge_areas table for every single group."""
+    CnpqSyncLogic._ka_cache = None
+    tracker = MagicMock()
+    tracker.record_source_record.return_value = SimpleNamespace(id=91)
+    monkeypatch.setattr(cnpq_sync_module, "tracking_recorder", tracker)
+
+    def make_logic():
+        logic = CnpqSyncLogic()
+        session = MagicMock()
+        existence_check = MagicMock()
+        existence_check.fetchone.return_value = None
+        session.execute.side_effect = [existence_check, MagicMock()]
+        logic.rg_ctrl = MagicMock()
+        logic.rg_ctrl._service._repository._session = session
+        logic.ka_ctrl = MagicMock()
+        logic.ka_ctrl.get_all.return_value = [SimpleNamespace(id=55, name="Linha A")]
+        return logic
+
+    logic_group_1 = make_logic()
+    logic_group_1.sync_knowledge_areas(
+        group_id=10,
+        lines_data=[{"nome_da_linha_de_pesquisa": "Linha A"}],
+        source_file="grupo1.json",
+    )
+    logic_group_1.ka_ctrl.get_all.assert_called_once()
+
+    logic_group_2 = make_logic()
+    logic_group_2.sync_knowledge_areas(
+        group_id=20,
+        lines_data=[{"nome_da_linha_de_pesquisa": "Linha A"}],
+        source_file="grupo2.json",
+    )
+    # A second group with a fresh CnpqSyncLogic() instance must not re-fetch
+    # the whole knowledge_areas table — it reuses the class-level cache.
+    logic_group_2.ka_ctrl.get_all.assert_not_called()
+
+    CnpqSyncLogic._ka_cache = None

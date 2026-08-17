@@ -205,4 +205,90 @@ def test_exporter_warns_when_campuses_missing_but_groups_reference_them():
         exporter.export_all("output.json")
 
     # Assert
-    mock_logger.warning.assert_called_once()
+    warning_messages = [call.args[0] for call in mock_logger.warning.call_args_list]
+    assert any("campuses table is" in msg for msg in warning_messages)
+
+
+def _make_exporter_with_group(org_id, campus_id, orgs, campuses):
+    mock_sink = MagicMock(spec=IExportSink)
+    with (
+        patch(
+            "src.core.logic.research_group_exporter.ResearchGroupController"
+        ) as MockRgCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.CampusController"
+        ) as MockCampCtrl,
+        patch(
+            "src.core.logic.research_group_exporter.OrganizationController"
+        ) as MockOrgCtrl,
+    ):
+        MockOrgCtrl.return_value.get_all.return_value = orgs
+        MockCampCtrl.return_value.get_all.return_value = campuses
+
+        mock_group = MagicMock()
+        mock_group.to_dict.return_value = {"id": 1, "name": "G"}
+        mock_group.organization_id = org_id
+        mock_group.campus_id = campus_id
+        mock_group.knowledge_areas = []
+        mock_group.members = []
+
+        MockRgCtrl.return_value.get_all.return_value = [mock_group]
+
+        exporter = ResearchGroupExporter(sink=mock_sink)
+        unresolved_count = exporter.export_all("output.json")
+
+    exported = mock_sink.export.call_args[0][0]
+    return exported[0], unresolved_count
+
+
+def _make_entity(entity_id, name):
+    entity = MagicMock()
+    entity.id = entity_id
+    entity.name = name
+    return entity
+
+
+def test_group_with_valid_campus_and_organization_exports_normally():
+    org = _make_entity(1, "IFES")
+    campus = _make_entity(2, "Vitória")
+
+    exported, unresolved_count = _make_exporter_with_group(1, 2, [org], [campus])
+
+    assert exported["organization"] == {"id": 1, "name": "IFES"}
+    assert exported["campus"] == {"id": 2, "name": "Vitória"}
+    assert "unresolved_institutional_affiliation" not in exported
+    assert unresolved_count == 0
+
+
+def test_group_with_only_valid_campus_is_flagged_not_fabricated():
+    campus = _make_entity(2, "Vitória")
+
+    exported, unresolved_count = _make_exporter_with_group(999, 2, [], [campus])
+
+    assert exported["campus"] == {"id": 2, "name": "Vitória"}
+    assert exported["organization"] is None
+    assert exported["unresolved_institutional_affiliation"] is True
+    assert unresolved_count == 1
+
+
+def test_group_with_only_valid_organization_is_flagged_not_fabricated():
+    org = _make_entity(1, "IFES")
+
+    exported, unresolved_count = _make_exporter_with_group(1, 999, [org], [])
+
+    assert exported["organization"] == {"id": 1, "name": "IFES"}
+    assert exported["campus"] is None
+    assert exported["unresolved_institutional_affiliation"] is True
+    assert unresolved_count == 1
+
+
+def test_group_with_neither_valid_is_flagged_not_fabricated():
+    org = _make_entity(1, "IFES")
+    campus = _make_entity(2, "Vitória")
+
+    exported, unresolved_count = _make_exporter_with_group(999, 999, [org], [campus])
+
+    assert exported["campus"] is None
+    assert exported["organization"] is None
+    assert exported["unresolved_institutional_affiliation"] is True
+    assert unresolved_count == 1

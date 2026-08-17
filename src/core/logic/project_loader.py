@@ -40,6 +40,16 @@ class ProjectLoader:
         self.rg_controller = ResearchGroupController()
         self.adv_controller = AdvisorshipController()
 
+        # Caches whether a given initiative id is actually an Advisorship,
+        # keyed by DB id (a fixed schema fact that never changes for that
+        # row). Without this, _is_advisorship_candidate's fallback path hit
+        # self.adv_controller.get_by_id(candidate_id) — a real DB round trip
+        # — every single time a non-Advisorship-typed cached candidate was
+        # checked, i.e. up to twice per row via _resolve_existing_initiative.
+        # Confirmed via SQL tracing against real Lattes advisorship data:
+        # hundreds of redundant "SELECT initiatives..." queries per file.
+        self._advisorship_candidate_id_cache: Dict[int, bool] = {}
+
         # Service/Logic Classes
         self.entity_manager = EntityManager(self.controller, self.person_controller)
         self.person_matcher = PersonMatcher(self.person_controller)
@@ -97,21 +107,32 @@ class ProjectLoader:
         if not hasattr(self, "_initiatives_cache") or self._initiatives_cache is None:
             logger.info("Fetching existing initiatives for UPSERT...")
             self._initiatives_cache = self.controller.get_all()
+            # Built once alongside _initiatives_cache instead of being
+            # rebuilt (re-scanning every cached initiative) on every single
+            # process_records() call — this loader is invoked once per
+            # source file, so that rebuild was O(files * initiatives).
+            # Reusing the same dicts across calls also means initiatives
+            # created while processing an earlier file are visible (not
+            # re-created) when processing a later one, since both dicts are
+            # mutated in place as new initiatives are created (see
+            # _process_row below).
+            existing_initiatives = self._initiatives_cache
+            self._existing_by_name = {
+                init.name: init
+                for init in existing_initiatives
+                if getattr(init, "name", None)
+            }
+            self._existing_by_identity = {}
+            for init in existing_initiatives:
+                identity = get_existing_initiative_identity(init)
+                if identity:
+                    self._existing_by_identity[identity] = init
         else:
             logger.info(
                 f"Using cached initiatives ({len(self._initiatives_cache)} items)."
             )
-        existing_initiatives = self._initiatives_cache
-        existing_by_name = {
-            init.name: init
-            for init in existing_initiatives
-            if getattr(init, "name", None)
-        }
-        existing_by_identity = {}
-        for init in existing_initiatives:
-            identity = get_existing_initiative_identity(init)
-            if identity:
-                existing_by_identity[identity] = init
+        existing_by_name = self._existing_by_name
+        existing_by_identity = self._existing_by_identity
 
         self.person_matcher.preload_cache()
         initial_persons_count = len(self.person_matcher._persons_cache)
@@ -157,8 +178,7 @@ class ProjectLoader:
         session = self.controller._service._repository._session
 
         # Aggregate dates for all parents that have advisorships
-        query = text(
-            """
+        query = text("""
             SELECT
                 i.parent_id,
                 MIN(i.start_date) as min_start,
@@ -167,8 +187,7 @@ class ProjectLoader:
             JOIN initiatives i ON a.id = i.id
             WHERE i.parent_id IS NOT NULL
             GROUP BY i.parent_id
-        """
-        )
+        """)
 
         results = session.execute(query).fetchall()
 
@@ -554,10 +573,18 @@ class ProjectLoader:
         if not candidate_id:
             return False
 
+        if not hasattr(self, "_advisorship_candidate_id_cache"):
+            self._advisorship_candidate_id_cache = {}
+        cached = self._advisorship_candidate_id_cache.get(candidate_id)
+        if cached is not None:
+            return cached
+
         try:
-            return self.adv_controller.get_by_id(candidate_id) is not None
+            result = self.adv_controller.get_by_id(candidate_id) is not None
         except Exception:
-            return False
+            result = False
+        self._advisorship_candidate_id_cache[candidate_id] = result
+        return result
 
     def _lookup_existing_by_exact_name(
         self, title: Optional[str], model_class

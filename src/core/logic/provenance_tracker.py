@@ -9,7 +9,7 @@ class ProvenanceTracker:
     Valid origins: 'LIVE', 'ZIP ANTERIOR', 'PARCIAL', 'VAZIO'.
     """
 
-    VALID_ORIGINS = {"LIVE", "ZIP ANTERIOR", "PARCIAL", "VAZIO"}
+    VALID_ORIGINS = {"LIVE", "ZIP ANTERIOR", "PARCIAL", "VAZIO", "BACKUP_DB"}
 
     @classmethod
     def set_provenance(

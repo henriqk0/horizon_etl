@@ -67,7 +67,11 @@ def test_all_ok_returns_zero():
         assert wo.run_weekly() == 0
 
 
-def test_critical_timeout_fails_but_later_phases_still_run():
+def test_noncritical_timeout_does_not_fail_but_later_phases_still_run():
+    # sigpesq is deliberately non-critical (see _PHASES in
+    # weekly_orchestrator.py): the backup-merger resilience architecture
+    # means a SigPesq outage/timeout should not fail the whole weekly run,
+    # since merge_backup covers for the missing scraped data.
     seen = []
     with (
         patch("src.notifications.telegram.send_telegram_message", return_value=True),
@@ -78,8 +82,24 @@ def test_critical_timeout_fails_but_later_phases_still_run():
         ),
     ):
         rc = wo.run_weekly()
-    assert rc == 1
+    assert rc == 0
     assert "export_canonical" in seen  # isolation: sigpesq timeout didn't abort the run
+
+
+def test_critical_timeout_fails_run_but_later_phases_still_run():
+    seen = []
+    with (
+        patch("src.notifications.telegram.send_telegram_message", return_value=True),
+        patch.object(
+            wo.subprocess,
+            "run",
+            side_effect=_fake_run_factory(timeout_cmd="export_canonical", seen=seen),
+        ),
+    ):
+        rc = wo.run_weekly()
+    assert rc == 1
+    # isolation: a critical phase timing out still doesn't abort later phases
+    assert "anonymize_backfill" in seen
 
 
 def test_telegram_failure_never_changes_outcome():

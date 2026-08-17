@@ -28,6 +28,12 @@ class PersonMatcher:
         self._persons_cache: Dict[str, Person] = {}
         self._emails_cache: Dict[str, Person] = {}
         self._canonical_cache: Dict[str, Person] = {}
+        # Maps normalize_name(name) -> Person, maintained incrementally so
+        # exact normalized-name lookups and the fuzzy-match candidate list
+        # are O(1)/pre-computed instead of re-normalizing every cached name
+        # on every single match_or_create() call (see normalize_name cost
+        # analysis in the class docstring below).
+        self._normalized_cache: Dict[str, Person] = {}
 
     def preload_cache(self):
         """
@@ -49,6 +55,7 @@ class PersonMatcher:
             self._persons_cache = {}
             self._emails_cache = {}
             self._canonical_cache = {}
+            self._normalized_cache = {}
             for p in all_persons:
                 if isinstance(p, dict):
                     name = p.get("name")
@@ -69,6 +76,13 @@ class PersonMatcher:
                             p
                         ) > self._person_quality_score(current):
                             self._canonical_cache[canonical_name] = p
+                    normalized_name = self.normalize_name(name)
+                    if normalized_name:
+                        current = self._normalized_cache.get(normalized_name)
+                        if current is None or self._person_quality_score(
+                            p
+                        ) > self._person_quality_score(current):
+                            self._normalized_cache[normalized_name] = p
                 for email in emails:
                     if email:
                         self._emails_cache[email.strip().lower()] = p
@@ -204,6 +218,8 @@ class PersonMatcher:
             person = self._canonical_cache[canonical_input]
             self._register_email(email, person)
             self._persons_cache[name] = person
+            if normalized_input:
+                self._normalized_cache.setdefault(normalized_input, person)
             return person
 
         # 1.6 Exact raw-name match.
@@ -212,19 +228,26 @@ class PersonMatcher:
             self._register_email(email, person)
             return person
 
-        # 2. Exact Match in Cache (Normalized)
-        for cached_name, person in self._persons_cache.items():
-            norm_cached = self.normalize_name(cached_name)
-            if norm_cached == normalized_input:
-                self._persons_cache[name] = person
-                self._register_email(email, person)
-                return person
+        # 2. Exact Match in Cache (Normalized) — O(1) via the incrementally
+        # maintained _normalized_cache index. This used to re-normalize
+        # every cached name (an expensive Unicode NFD + regex pass) on every
+        # single call, which dominated runtime once the persons cache grew
+        # into the tens of thousands (see resolve_or_create_researcher /
+        # ingest_lattes_advisorships_flow — this is invoked per advisorship
+        # per file, so an O(n) scan here is O(files * advisorships * n)).
+        if normalized_input and normalized_input in self._normalized_cache:
+            person = self._normalized_cache[normalized_input]
+            self._persons_cache[name] = person
+            self._register_email(email, person)
+            return person
 
-        # 3. Fuzzy Matching in Cache
-        names_in_cache = list(self._persons_cache.keys())
-        if names_in_cache and normalized_input:
-            normalized_to_original = {self.normalize_name(n): n for n in names_in_cache}
-            normalized_list = list(normalized_to_original.keys())
+        # 3. Fuzzy Matching in Cache — reuses the same pre-normalized index
+        # instead of rebuilding it (re-normalizing every cached name) on
+        # every call. The fuzzy scan itself (thefuzz.process.extractOne)
+        # remains O(n) by nature of fuzzy matching, but the redundant
+        # normalization work is eliminated.
+        if self._normalized_cache and normalized_input:
+            normalized_list = list(self._normalized_cache.keys())
 
             best_norm_match, score = process.extractOne(
                 normalized_input, normalized_list, scorer=fuzz.token_sort_ratio
@@ -238,12 +261,15 @@ class PersonMatcher:
                         f"Fuzzy match '{best_norm_match}' ignored due to strict matching policy (score: {score})"
                     )
                 else:
-                    original_name = normalized_to_original[best_norm_match]
+                    person = self._normalized_cache[best_norm_match]
                     logger.info(
-                        f"Fuzzy match found: '{name}' matches '{original_name}' (score: {score})"
+                        f"Fuzzy match found: '{name}' matches normalized '{best_norm_match}' (score: {score})"
                     )
-                    person = self._persons_cache[original_name]
                     self._persons_cache[name] = person
+                    # Cache this variant so identical repeats of the same
+                    # misspelling/variant hit the O(1) path (step 2) next time
+                    # instead of re-running fuzzy matching.
+                    self._normalized_cache.setdefault(normalized_input, person)
                     self._register_email(email, person)
                     return person
 
@@ -258,6 +284,12 @@ class PersonMatcher:
                     person
                 ) > self._person_quality_score(current):
                     self._canonical_cache[canonical_input] = person
+            if normalized_input:
+                current = self._normalized_cache.get(normalized_input)
+                if current is None or self._person_quality_score(
+                    person
+                ) > self._person_quality_score(current):
+                    self._normalized_cache[normalized_input] = person
             self._register_email(email, person)
             logger.debug(f"Created person: {name} (emails: {emails})")
             return person

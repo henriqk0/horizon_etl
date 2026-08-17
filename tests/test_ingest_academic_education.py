@@ -23,12 +23,6 @@ def mock_researcher_controller():
 
 
 @pytest.fixture
-def mock_education_controller():
-    with patch("src.flows.lattes.projects.AcademicEducationController") as mock:
-        yield mock
-
-
-@pytest.fixture
 def mock_lattes_parser():
     with patch("src.flows.lattes.projects.LattesParser") as mock:
         yield mock
@@ -37,11 +31,13 @@ def mock_lattes_parser():
 def test_ingest_academic_education(
     mock_entity_manager,
     mock_researcher_controller,
-    mock_education_controller,
     mock_lattes_parser,
 ):
     # Setup Mocks
-    mock_edu_ctrl_instance = mock_education_controller.return_value
+    # AcademicEducationController is no longer instantiated inside
+    # src/flows/lattes/projects.py — it's accessed via
+    # entity_manager.academic_edu_controller, which the caller injects.
+    mock_edu_ctrl_instance = MagicMock()
     mock_parser_instance = mock_lattes_parser.return_value
 
     # Link mocks
@@ -78,15 +74,23 @@ def test_ingest_academic_education(
 
     # Mock JSON loading (we need to patch built-in open/json.load or use a real file)
     # Easiest is to point to a dummy file and mock json.load
-    with patch("builtins.open", new_callable=MagicMock) as mock_open:
+    with patch("builtins.open", new_callable=MagicMock):
         with patch("json.load") as mock_json_load:
             mock_json_load.return_value = {
                 "nome": "Test Researcher",
                 "idLattes": "1234567890",
             }
 
-            # Execute
-            ingest_file_task.fn("dummy_path/1234567890.json", mock_entity_manager)
+            # Execute — all_researchers/researcher_ctrl/article_ctrl are now
+            # pre-fetched and injected by the caller instead of being
+            # constructed inside the task.
+            ingest_file_task.fn(
+                "dummy_path/1234567890.json",
+                mock_entity_manager,
+                [mock_researcher],
+                mock_researcher_controller.return_value,
+                MagicMock(),
+            )
 
             # Assert
             # Check if parse_academic_education was called

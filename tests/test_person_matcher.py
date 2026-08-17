@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -89,6 +89,38 @@ def test_match_or_create_uses_canonical_name_for_case_variants(matcher):
     result = matcher.match_or_create("Gustavo Maia De Almeida", strict_match=True)
     assert result.id == 1
     matcher.person_controller.create_person.assert_not_called()
+
+
+def test_repeated_fuzzy_variant_reuses_normalized_cache_without_refuzzing(matcher):
+    """Perf regression guard: once a name variant has been fuzzy-matched, an
+    identical repeat lookup must hit the O(1) normalized-cache path (step 2)
+    instead of re-running thefuzz.process.extractOne — this is what makes
+    repeated misspellings across many records cheap instead of re-scanning
+    the whole cache with fuzzy matching every time."""
+    person_a = MockPerson(1, "Persona A Alpha")
+    matcher.person_controller.get_all.return_value = [person_a]
+    matcher.preload_cache()
+
+    first = matcher.match_or_create("Persona Alpha", strict_match=False)
+    assert first.id == 1
+    assert matcher.normalize_name("Persona Alpha") in matcher._normalized_cache
+
+    with patch("src.core.logic.person_matcher.process.extractOne") as mock_extract_one:
+        second = matcher.match_or_create("Persona Alpha", strict_match=False)
+        assert second.id == 1
+        mock_extract_one.assert_not_called()
+
+
+def test_normalized_cache_stays_consistent_with_persons_cache_after_preload(matcher):
+    """Every person with a non-empty normalized name must be indexed in
+    _normalized_cache after preload, keeping step 2's O(1) lookup complete."""
+    person = MockPerson(1, "Ana Beatriz Souza")
+    matcher.person_controller.get_all.return_value = [person]
+    matcher.preload_cache()
+
+    assert (
+        matcher._normalized_cache[matcher.normalize_name("Ana Beatriz Souza")].id == 1
+    )
 
 
 def test_match_or_create_prefers_richer_duplicate_for_same_canonical_name(matcher):

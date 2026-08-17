@@ -77,79 +77,61 @@ def test_prefetch_lattes_cache_downloads_only_missing_ids(tmp_path):
     )
 
 
-def test_validate_script_lattes_runtime_rejects_driver_browser_major_mismatch(
-    tmp_path, monkeypatch
+def test_validate_script_lattes_runtime_rejects_missing_playwright_chromium(
+    monkeypatch,
 ):
-    chromedriver = tmp_path / "chromedriver"
-    chrome = tmp_path / "chrome"
-    chromedriver.write_text("")
-    chrome.write_text("")
+    """validate_script_lattes_runtime no longer compares chromedriver/chrome
+    versions (that scriptLattes-driven implementation was replaced by a
+    Playwright-based one) — it now only requires Playwright's bundled
+    Chromium to be installed."""
+    monkeypatch.setattr(
+        "src.flows.lattes.download._check_playwright_chromium", lambda: False
+    )
 
-    def fake_version(command):
-        if command == [str(chromedriver), "--version"]:
-            return "ChromeDriver 144.0.7559.109"
-        if command == [str(chrome), "--version"]:
-            return "Google Chrome for Testing 147.0.7727.55"
-        raise AssertionError(f"unexpected command: {command}")
-
-    monkeypatch.setattr("src.flows.lattes.download._read_command_version", fake_version)
-
-    with pytest.raises(ScriptLattesRuntimeError, match="reports major version"):
-        validate_script_lattes_runtime(str(chromedriver), str(chrome))
+    with pytest.raises(ScriptLattesRuntimeError, match="Chromium is not installed"):
+        validate_script_lattes_runtime()
 
 
-def test_validate_script_lattes_runtime_skips_auto_discovered_mismatches(
-    tmp_path, monkeypatch
+def test_validate_script_lattes_runtime_accepts_installed_playwright_chromium(
+    monkeypatch,
 ):
-    chromedriver = tmp_path / "chromedriver"
-    old_chrome = tmp_path / "old-chrome"
-    matching_chromium = tmp_path / "matching-chromium"
-    chromedriver.write_text("")
-    old_chrome.write_text("")
-    matching_chromium.write_text("")
-    monkeypatch.delenv("CHROME_BINARY", raising=False)
+    monkeypatch.setattr(
+        "src.flows.lattes.download._check_playwright_chromium", lambda: True
+    )
 
-    def fake_which(command):
-        return {
-            "google-chrome": str(old_chrome),
-            "chromium": str(matching_chromium),
-        }.get(command)
-
-    def fake_version(command):
-        if command == [str(chromedriver), "--version"]:
-            return "ChromeDriver 147.0.7727.55"
-        if command == [str(old_chrome), "--version"]:
-            return "Google Chrome 144.0.7559.109"
-        if command == [str(matching_chromium), "--version"]:
-            return "Chromium 147.0.7727.55"
-        raise AssertionError(f"unexpected command: {command}")
-
-    monkeypatch.setattr("src.flows.lattes.download.shutil.which", fake_which)
-    monkeypatch.setattr("src.flows.lattes.download._read_command_version", fake_version)
-
-    assert validate_script_lattes_runtime(str(chromedriver)) == str(matching_chromium)
+    assert validate_script_lattes_runtime() == "playwright-chromium"
 
 
 def test_download_lattes_flow(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    list_dir = tmp_path / "data" / "lattes_run"
-    list_dir.mkdir(parents=True)
-    (list_dir / "lattes.list").write_text(
-        "\n".join(
-            [
-                "8400407353673370 , Paulo Sergio dos Santos Junior",
-                "9583314331960942 , Daniel Cruz Cavalieri",
-            ]
+
+    # The flow now sources its researcher list from the DB (get_researchers_from_db
+    # -> generate_list) instead of reading a pre-existing data/lattes_run/lattes.list
+    # file, and validate_script_lattes_runtime/prefetch_lattes_cache/
+    # run_script_lattes_real no longer take a chrome_binary argument (the
+    # scriptLattes/chromedriver runtime was replaced by Playwright). See
+    # src/flows/lattes/download.py.
+    def fake_get_researchers_from_db():
+        return [
+            {"name": "Paulo Sergio dos Santos Junior", "lattes_id": "8400407353673370"},
+            {"name": "Daniel Cruz Cavalieri", "lattes_id": "9583314331960942"},
+        ]
+
+    def fake_generate_list(researchers):
+        list_path = tmp_path / "cache" / "lattes.list"
+        list_path.parent.mkdir(parents=True, exist_ok=True)
+        list_path.write_text(
+            "\n".join(f"{r['lattes_id']} , {r['name']}" for r in researchers)
         )
-    )
+        return str(list_path)
 
     prefetch_calls = []
 
-    def fake_prefetch(lattes_ids, cache_dir, max_workers, chrome_binary):
-        prefetch_calls.append((lattes_ids, cache_dir, max_workers, chrome_binary))
+    def fake_prefetch(lattes_ids, cache_dir, max_workers):
+        prefetch_calls.append((lattes_ids, cache_dir, max_workers))
         return lattes_ids
 
-    def fake_run_script_lattes(config_path, chrome_binary):
+    def fake_run_script_lattes(config_path):
         output_dir = tmp_path / "data" / "lattes_json"
         output_dir.mkdir(parents=True, exist_ok=True)
         (output_dir / "00_Paulo_8400407353673370.json").write_text("{}")
@@ -157,8 +139,13 @@ def test_download_lattes_flow(tmp_path, monkeypatch):
 
     monkeypatch.setenv("HORIZON_LATTES_DOWNLOAD_WORKERS", "2")
     monkeypatch.setattr(
+        "src.flows.lattes.download.get_researchers_from_db",
+        fake_get_researchers_from_db,
+    )
+    monkeypatch.setattr("src.flows.lattes.download.generate_list", fake_generate_list)
+    monkeypatch.setattr(
         "src.flows.lattes.download.validate_script_lattes_runtime",
-        lambda _chromedriver: "/tmp/chrome",
+        lambda: "playwright-chromium",
     )
     monkeypatch.setattr(
         "src.flows.lattes.download.prefetch_lattes_cache", fake_prefetch
@@ -171,14 +158,13 @@ def test_download_lattes_flow(tmp_path, monkeypatch):
     download_lattes_flow()
 
     # Verify
-    assert os.path.exists("lattes.config")
+    assert os.path.exists("cache/lattes.config")
     assert os.path.isdir("data/lattes_json")
     assert prefetch_calls == [
         (
             ["8400407353673370", "9583314331960942"],
             str(tmp_path / "cache"),
             2,
-            "/tmp/chrome",
         )
     ]
 

@@ -101,6 +101,24 @@ def setup_database():
     print("Recreating all tables via Base.metadata...")
     # This will create tables for all models registered with Base (including Advisorship/Fellowship if imported)
     Base.metadata.create_all(client._engine)
+
+    # team_members has no uniqueness constraint of its own in the ORM model,
+    # so multiple independent code paths (backup_db_provisioner.py's two
+    # redundant loops, live CNPq/SigPesq syncs) that each rely on
+    # "INSERT OR IGNORE" for idempotency silently produce duplicate rows
+    # without it. This must be created here (not only applied ad-hoc by
+    # team_membership_migration.py) because `make weekly-flows` runs
+    # db-reset -> db-init before every pipeline run, which drops and
+    # recreates the whole schema from Base.metadata alone. See
+    # specs/014-team-id-collision-fix/research.md, Decision 2.
+    with client._engine.connect() as conn:
+        conn.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_team_members_team_person_role "
+                "ON team_members(team_id, person_id, role_id)"
+            )
+        )
+        conn.commit()
     print("Database tables initialized successfully.")
 
 

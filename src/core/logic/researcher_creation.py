@@ -36,6 +36,28 @@ def create_researcher_with_resume_fallback(
             emails=emails,
             identification_id=identification_id,
         )
+    except TypeError as exc:
+        # TypeError is a subclass of Exception, so this clause MUST come
+        # before the generic `except Exception` below — otherwise it is
+        # unreachable and this resume/signature-mismatch fallback (the
+        # function's whole purpose) never engages.
+        if "resume" not in str(exc):
+            raise
+
+        logger.debug(
+            f"Falling back to direct Researcher creation for '{name}' due to controller/service signature mismatch."
+        )
+        researcher = researcher_ctrl._service.create_with_details(
+            name=name,
+            emails=emails,
+            identification_id=identification_id,
+        )
+        _ensure_researcher_row(researcher_ctrl, researcher.id)
+
+        try:
+            return researcher_ctrl.get_by_id(researcher.id)
+        except Exception:
+            return researcher
     except Exception as exc:
         # Handle UNIQUE constraint conflict (e.g., from concurrent Prefect tasks)
         if _is_unique_constraint_error(exc):
@@ -68,24 +90,6 @@ def create_researcher_with_resume_fallback(
             except Exception:
                 return researcher
         raise
-    except TypeError as exc:
-        if "resume" not in str(exc):
-            raise
-
-        logger.debug(
-            f"Falling back to direct Researcher creation for '{name}' due to controller/service signature mismatch."
-        )
-        researcher = researcher_ctrl._service.create_with_details(
-            name=name,
-            emails=emails,
-            identification_id=identification_id,
-        )
-        _ensure_researcher_row(researcher_ctrl, researcher.id)
-
-        try:
-            return researcher_ctrl.get_by_id(researcher.id)
-        except Exception:
-            return researcher
 
 
 def _ensure_researcher_row(researcher_ctrl, person_id: Optional[int]) -> None:
@@ -128,24 +132,20 @@ def _ensure_person_emails(
                 continue
             email = anonymize_person_data({"email": email})["email"]
             exists = session.execute(
-                text(
-                    """
+                text("""
                     SELECT 1
                     FROM person_emails
                     WHERE person_id = :pid
                       AND lower(email) = lower(:email)
-                    """
-                ),
+                    """),
                 {"pid": person_id, "email": email},
             ).scalar()
             if not exists:
                 session.execute(
-                    text(
-                        """
+                    text("""
                         INSERT INTO person_emails (person_id, email)
                         VALUES (:pid, :email)
-                        """
-                    ),
+                        """),
                     {"pid": person_id, "email": email},
                 )
         session.commit()

@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
 from src.core.logic.canonical_exporter import CanonicalDataExporter
 from src.core.ports.export_sink import IExportSink
 from src.tracking.entities import (
@@ -1082,3 +1085,83 @@ def test_export_students_payload_enrichment():
         "resolved_via": "project",
         "confidence": "high",
     }
+
+
+def _make_team_id_collision_session():
+    """Real in-memory SQLite session with just enough schema to exercise
+    _fetch_person_research_group_roles and the researcher-enrichment group
+    query against a scenario that, before spec 014's fix, would have
+    collided: a research group and an initiative sharing a numeric id."""
+    engine = create_engine("sqlite:///:memory:")
+    session = sessionmaker(bind=engine)()
+    for statement in (
+        "CREATE TABLE teams (id INTEGER PRIMARY KEY, name VARCHAR, organization_id INTEGER)",
+        "CREATE TABLE research_groups (id INTEGER PRIMARY KEY)",
+        "CREATE TABLE initiatives (id INTEGER PRIMARY KEY, name VARCHAR)",
+        "CREATE TABLE initiative_teams (initiative_id INTEGER, team_id INTEGER)",
+        "CREATE TABLE team_members (id INTEGER PRIMARY KEY, team_id INTEGER, person_id INTEGER, role_id INTEGER)",
+        "CREATE TABLE roles (id INTEGER PRIMARY KEY, name VARCHAR)",
+    ):
+        session.execute(text(statement))
+    # Group #9 ("Aquicultura...") and initiative #9 ("ConectaFAPES") -- the
+    # real reported collision, now correctly disjoint: the initiative's own
+    # team is id 900, not 9.
+    session.execute(text("INSERT INTO research_groups (id) VALUES (9)"))
+    session.execute(text("INSERT INTO teams (id, name) VALUES (9, 'Aquicultura')"))
+    session.execute(
+        text("INSERT INTO initiatives (id, name) VALUES (9, 'ConectaFAPES')")
+    )
+    session.execute(
+        text("INSERT INTO teams (id, name) VALUES (900, 'ConectaFAPES team')")
+    )
+    session.execute(
+        text("INSERT INTO initiative_teams (initiative_id, team_id) VALUES (9, 900)")
+    )
+    session.execute(text("INSERT INTO roles (id, name) VALUES (1, 'Pesquisador')"))
+    # Real group member.
+    session.execute(
+        text(
+            "INSERT INTO team_members (team_id, person_id, role_id) VALUES (9, 281, 1)"
+        )
+    )
+    # Real initiative member (Paulo Sergio), correctly filed under the
+    # initiative's own disjoint team id -- not the group's.
+    session.execute(
+        text(
+            "INSERT INTO team_members (team_id, person_id, role_id) VALUES (900, 456, 1)"
+        )
+    )
+    session.commit()
+    return session
+
+
+def test_fetch_person_research_group_roles_excludes_colliding_initiative_members():
+    """Regression guard for spec 014: with disjoint team ids, a research
+    group's role query must never pick up a person who is only on the
+    initiative that used to share its numeric id."""
+    session = _make_team_id_collision_session()
+    exporter = CanonicalDataExporter.__new__(CanonicalDataExporter)
+
+    role_map = exporter._fetch_person_research_group_roles(session)
+
+    assert 281 in role_map
+    assert 456 not in role_map
+
+
+def test_person_groups_map_query_excludes_colliding_initiative_members():
+    """Regression guard for spec 014: the researcher-enrichment query that
+    builds each researcher's `research_groups` array must never attribute
+    an initiative's team member to a group that used to share its id."""
+    session = _make_team_id_collision_session()
+
+    g_query = text("""
+        SELECT tm.person_id, rg.id, t.name
+        FROM team_members tm
+        JOIN research_groups rg ON tm.team_id = rg.id
+        JOIN teams t ON rg.id = t.id
+        """)
+    rows = session.execute(g_query).fetchall()
+    person_ids_with_group_9 = {row[0] for row in rows if row[1] == 9}
+
+    assert person_ids_with_group_9 == {281}
+    assert 456 not in person_ids_with_group_9

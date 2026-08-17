@@ -91,7 +91,13 @@ def export_groups_task(output_dir: str, campus: Optional[str] = None):
     )
     sink = JsonSink()
     exporter = ResearchGroupExporter(sink=sink)
-    exporter.export_all(output_path, campus_filter=campus)
+    unresolved_count = exporter.export_all(output_path, campus_filter=campus)
+    if unresolved_count:
+        logger.warning(
+            "Research Groups export: {} group(s) have an unresolved "
+            "institutional affiliation (see spec 011)",
+            unresolved_count,
+        )
 
 
 @task(name="export_initiatives_task")

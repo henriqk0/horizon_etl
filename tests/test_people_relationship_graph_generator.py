@@ -288,3 +288,117 @@ def test_people_relationship_graph_generator_exports_filtered_graph_files(tmp_pa
     assert nodes_by_id[1]["is_advisorship_neighbor"] is False
     assert nodes_by_id[3]["is_group_member"] is False
     assert nodes_by_id[3]["is_advisorship_neighbor"] is True
+
+
+def _write_large_group_inputs(tmp_path, member_count=500):
+    researchers = [
+        {
+            "id": i,
+            "name": f"Member {i}",
+            "classification": "researcher",
+            "classification_confidence": "high",
+            "was_student": False,
+            "was_staff": True,
+            "campus": None,
+        }
+        for i in range(member_count)
+    ]
+    fixtures = {
+        "researchers.json": researchers,
+        "initiatives.json": [],
+        "research_groups.json": [
+            {
+                "id": 900,
+                "name": "Grupo Gigante",
+                "short_name": "GG",
+                "members": [
+                    {"id": i, "name": f"Member {i}"} for i in range(member_count)
+                ],
+            }
+        ],
+        "advisorships.json": [],
+    }
+    paths = {}
+    for filename, payload in fixtures.items():
+        path = tmp_path / filename
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        paths[filename] = path
+    return paths
+
+
+def test_large_research_group_edge_count_stays_bounded_not_quadratic(tmp_path):
+    member_count = 500
+    paths = _write_large_group_inputs(tmp_path, member_count)
+    output_dir = tmp_path / "exports"
+
+    generator = PeopleRelationshipGraphGenerator()
+    generator.generate_all(
+        researchers_path=str(paths["researchers.json"]),
+        initiatives_path=str(paths["initiatives.json"]),
+        research_groups_path=str(paths["research_groups.json"]),
+        advisorships_path=str(paths["advisorships.json"]),
+        output_dir=str(output_dir),
+    )
+
+    group_graph_path = (
+        output_dir
+        / "research_group_relationship_graphs"
+        / "research_group_900_relationship_graph.json"
+    )
+    group_graph = _load_json(group_graph_path)
+
+    # Without capping, a 500-member clique would have ~124,750 edges
+    # (500 * 499 / 2). Capped, it must stay in the same order of magnitude
+    # as the node count.
+    assert group_graph["graph_stats"]["nodes"] == member_count
+    assert group_graph["graph_stats"]["edges"] < member_count * 4
+
+
+def test_relationship_graph_stats_match_trimmed_graph_after_cap(tmp_path):
+    paths = _write_large_group_inputs(tmp_path, member_count=50)
+    output_dir = tmp_path / "exports"
+
+    generator = PeopleRelationshipGraphGenerator()
+    generator.generate_all(
+        researchers_path=str(paths["researchers.json"]),
+        initiatives_path=str(paths["initiatives.json"]),
+        research_groups_path=str(paths["research_groups.json"]),
+        advisorships_path=str(paths["advisorships.json"]),
+        output_dir=str(output_dir),
+    )
+
+    group_graph_path = (
+        output_dir
+        / "research_group_relationship_graphs"
+        / "research_group_900_relationship_graph.json"
+    )
+    group_graph = _load_json(group_graph_path)
+
+    nodes = group_graph["graph"]["nodes"]
+    edges = group_graph["graph"]["edges"]
+
+    assert group_graph["graph_stats"]["nodes"] == len(nodes)
+    assert group_graph["graph_stats"]["edges"] == len(edges)
+
+    recounted_degree = {}
+    for edge in edges:
+        recounted_degree[edge["source"]] = recounted_degree.get(edge["source"], 0) + 1
+        recounted_degree[edge["target"]] = recounted_degree.get(edge["target"], 0) + 1
+    for node in nodes:
+        assert node["degree"] == recounted_degree.get(node["id"], 0)
+
+    recounted_initiative_total = sum(e.get("initiative_count", 0) for e in edges)
+    recounted_group_total = sum(e.get("research_group_count", 0) for e in edges)
+    recounted_advisorship_total = sum(e.get("advisorship_count", 0) for e in edges)
+    assert (
+        group_graph["graph_stats"]["relation_event_totals"]["initiative"]
+        == recounted_initiative_total
+    )
+    assert (
+        group_graph["graph_stats"]["relation_event_totals"]["research_group"]
+        == recounted_group_total
+    )
+    assert (
+        group_graph["graph_stats"]["relation_event_totals"]["advisorship"]
+        == recounted_advisorship_total
+    )

@@ -323,7 +323,7 @@ class TrackingRecorder:
                         canonical_entity_id=canonical_entity_id,
                         attribute_name=attribute_name,
                         value_hash=stable_hash(value),
-                        value_json=_json_safe(value),
+                        value_json=_json_safe(sanitize_payload(value)),
                         is_selected=True,
                         selection_reason=selection_reason,
                     )

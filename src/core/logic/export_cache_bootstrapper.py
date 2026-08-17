@@ -11,7 +11,13 @@ class ExportCacheBootstrapper:
     into the target export directory prior to ingestion pipeline execution.
     """
 
-    DEFAULT_PATTERNS = ("canonical_export_*.zip", "exports_canonical.zip")
+    DEFAULT_PATTERNS = (
+        "novo_backup.zip",
+        "novo_backup*.zip",
+        "export.zip",
+        "canonical_export_*.zip",
+        "exports_canonical*.zip",
+    )
 
     def find_latest_archive(self, search_dirs: list[str] | None = None) -> Path | None:
         """
@@ -72,7 +78,7 @@ class ExportCacheBootstrapper:
         try:
             with zipfile.ZipFile(archive_path, "r") as zf:
                 namelist = zf.namelist()
-                zf.extractall(target_path)
+                self._safe_extract_all(zf, target_path)
 
             logger.info(
                 "Successfully restored {} files from {} into {}",
@@ -95,3 +101,19 @@ class ExportCacheBootstrapper:
                 "files_extracted": 0,
                 "warning": msg,
             }
+
+    @staticmethod
+    def _safe_extract_all(zf: zipfile.ZipFile, target_path: Path) -> None:
+        """Extracts every member of zf into target_path, rejecting any entry
+        whose resolved path would land outside target_path ("Zip Slip",
+        CWE-22) — e.g. a member name containing "../" or an absolute path.
+        """
+        target_root = target_path.resolve()
+        for member in zf.infolist():
+            member_path = (target_root / member.filename).resolve()
+            if member_path != target_root and target_root not in member_path.parents:
+                raise ValueError(
+                    f"Refusing to extract unsafe zip member outside target "
+                    f"directory: {member.filename!r}"
+                )
+        zf.extractall(target_path)

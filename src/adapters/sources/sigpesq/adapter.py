@@ -61,14 +61,13 @@ class SigPesqAdapter(ISource):
         missing = [v for v in required_vars if not os.getenv(v)]
 
         if missing:
+            # Note: SIGPESQ_USER/SIGPESQ_USERNAME aliasing already happened
+            # above, so if SIGPESQ_USERNAME is still missing here, SIGPESQ_USER
+            # wasn't set either — there's no alias left to recover from.
             logger.error(
                 f"Missing environment variables for SigPesq: {', '.join(missing)}"
             )
-            # Try to be helpful if they used the wrong one
-            if "SIGPESQ_USERNAME" in missing and os.getenv("SIGPESQ_USER"):
-                logger.info("Found SIGPESQ_USER, mapped to SIGPESQ_USERNAME.")
-            else:
-                raise EnvironmentError(f"SigPesq Agent requires: {', '.join(missing)}")
+            raise EnvironmentError(f"SigPesq Agent requires: {', '.join(missing)}")
 
         logger.debug("Environment variables for SigPesq verified.")
 

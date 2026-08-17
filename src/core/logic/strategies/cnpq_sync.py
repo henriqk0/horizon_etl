@@ -19,6 +19,15 @@ class CnpqSyncLogic:
     Business logic for synchronizing CNPq data with the local database.
     """
 
+    # Class-level (shared across instances) cache of name(lower) -> KnowledgeArea.
+    # A fresh CnpqSyncLogic() is instantiated per group by the calling flow
+    # (src/flows/cnpq/groups.py), so an instance-level cache would still
+    # re-fetch the full knowledge_areas table (1500+ rows) once per group.
+    # Group sync is documented/required to run sequentially (avoids SQLite
+    # locks — see process_cnpq_group_data's docstring), so a shared mutable
+    # class-level cache is safe here without extra locking.
+    _ka_cache: Dict[str, Any] = None
+
     def __init__(self):
         self.rg_ctrl = ResearchGroupController()
         self.res_ctrl = ResearcherController()
@@ -424,13 +433,11 @@ class CnpqSyncLogic:
                                     )
 
                                     # Use direct SQL update for safety and to avoid ORM complexity with composite keys/relationships
-                                    upd_query = text(
-                                        """
+                                    upd_query = text("""
                                         UPDATE team_members
                                         SET end_date = :end_dt
                                         WHERE team_id = :gid AND person_id = :pid
-                                    """
-                                    )
+                                    """)
                                     session = self.rg_ctrl._service._repository._session
                                     session.execute(
                                         upd_query,
@@ -509,12 +516,16 @@ class CnpqSyncLogic:
             return
 
         try:
-            # 1. Fetch/Create Knowledge Areas
-            ka_map = {}
-            all_kas = self.ka_ctrl.get_all()
-            for ka in all_kas:
-                if ka.name:
-                    ka_map[normalize(ka.name).lower()] = ka
+            # 1. Fetch/Create Knowledge Areas — reuse the shared class-level
+            # cache instead of re-fetching the whole table for every group.
+            if CnpqSyncLogic._ka_cache is None:
+                ka_map: Dict[str, Any] = {}
+                all_kas = self.ka_ctrl.get_all()
+                for ka in all_kas:
+                    if ka.name:
+                        ka_map[normalize(ka.name).lower()] = ka
+                CnpqSyncLogic._ka_cache = ka_map
+            ka_map = CnpqSyncLogic._ka_cache
 
             processed_kas = []
             source_records_by_name = {}

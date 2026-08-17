@@ -187,6 +187,34 @@ class ResearchGroupLoader:
                 group_already_existed = name_key in existing_groups_map
                 if group_already_existed:
                     group = existing_groups_map[name_key]
+                    if area_ids:
+                        existing_area_ids = {
+                            getattr(a, "id", None)
+                            for a in (group.knowledge_areas or [])
+                        }
+                        missing_area_ids = [
+                            aid for aid in area_ids if aid not in existing_area_ids
+                        ]
+                        if missing_area_ids:
+                            for aid in missing_area_ids:
+                                area = self.area_ctrl.get_by_id(aid)
+                                if area:
+                                    group.knowledge_areas.append(area)
+                            try:
+                                self.rg_ctrl.update(group)
+                                tracking_recorder.record_change(
+                                    source_record_id=getattr(source_record, "id", None),
+                                    canonical_entity_type="research_group",
+                                    canonical_entity_id=group.id,
+                                    operation="update",
+                                    changed_fields=["knowledge_areas"],
+                                    after={"knowledge_area_ids": missing_area_ids},
+                                    reason="Re-synced knowledge areas from source file",
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to re-sync knowledge areas for group {name}: {e}"
+                                )
                     if (
                         pd.notna(site_url)
                         and getattr(group, "cnpq_url", None) != site_url

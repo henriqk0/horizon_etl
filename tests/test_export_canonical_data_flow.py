@@ -103,7 +103,7 @@ def test_export_canonical_data_flow_calls_tracking_exports_individually(tmp_path
     organizations_task.assert_called_once_with(output_dir)
     campuses_task.assert_called_once_with(output_dir, "Serra")
     knowledge_areas_task.assert_called_once_with(output_dir)
-    researchers_task.assert_called_once_with(output_dir)
+    researchers_task.assert_called_once_with(output_dir, "Serra")
     researchers_tracking_task.assert_called_once_with(output_dir)
     groups_task.assert_called_once_with(output_dir, "Serra")
     initiatives_task.assert_called_once_with(output_dir)

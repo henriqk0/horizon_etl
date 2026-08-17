@@ -8,6 +8,7 @@ from loguru import logger
 from networkx.readwrite import json_graph
 
 from src.core.logic.atomic_io import atomic_write_json
+from src.core.logic.graph_edge_capper import cap_node_degree
 
 
 class PeopleCollaborationGraphGenerator:
@@ -92,6 +93,9 @@ class PeopleCollaborationGraphGenerator:
             for a, b in combinations(set(authors), 2):
                 self._add_evidence(G, a, b, article_count=1)
 
+        cap_result = cap_node_degree(G)
+        G = cap_result.graph
+
         for node in G.nodes():
             G.nodes[node]["degree"] = G.degree(node)
             G.nodes[node]["weighted_degree"] = sum(
@@ -137,10 +141,15 @@ class PeopleCollaborationGraphGenerator:
         atomic_write_json(output_path, result, ensure_ascii=False, indent=2)
 
         logger.info(
-            "People collaboration graph: {} nodes, {} edges → {}",
+            "People collaboration graph: {} nodes, {} edges → {} "
+            "(edge cap: {} -> {}, {} removed, {:.1f}% reduction)",
             G.number_of_nodes(),
             G.number_of_edges(),
             output_path,
+            cap_result.original_edge_count,
+            cap_result.trimmed_edge_count,
+            cap_result.removed_edge_count,
+            cap_result.reduction_pct,
         )
         return result
 

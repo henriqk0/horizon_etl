@@ -313,22 +313,32 @@ class InitiativeLinker:
     def associate_keyword_knowledge_areas(
         self, initiative: Any, project_data: Dict[str, Any], rg_name: str
     ) -> None:
-        """Parses keywords and links them as Knowledge Areas to initiative, group, and researchers."""
+        """Parses keywords and links them as Knowledge Areas to initiative, group, and researchers.
+
+        When no keyword metadata is available, falls back to the linked research
+        group's already-known knowledge areas so the initiative is not left
+        without any linkage at all (see spec 012 FR-010).
+        """
         metadata = project_data.get("metadata", {})
         keywords_str = metadata.get("keywords")
-        if not keywords_str:
-            return
 
-        if ";" in str(keywords_str):
-            keywords = [k.strip() for k in str(keywords_str).split(";") if k.strip()]
+        if keywords_str:
+            if ";" in str(keywords_str):
+                keywords = [
+                    k.strip() for k in str(keywords_str).split(";") if k.strip()
+                ]
+            else:
+                keywords = [
+                    k.strip() for k in str(keywords_str).split(",") if k.strip()
+                ]
+
+            ka_ids = []
+            for kw in keywords:
+                kid = self.entity_manager.ensure_knowledge_area(kw)
+                if kid:
+                    ka_ids.append(kid)
         else:
-            keywords = [k.strip() for k in str(keywords_str).split(",") if k.strip()]
-
-        ka_ids = []
-        for kw in keywords:
-            kid = self.entity_manager.ensure_knowledge_area(kw)
-            if kid:
-                ka_ids.append(kid)
+            ka_ids = self._derive_knowledge_areas_from_group(rg_name) if rg_name else []
 
         if not ka_ids:
             return
@@ -419,6 +429,44 @@ class InitiativeLinker:
                 session.rollback()
         except Exception as e:
             logger.warning(f"Failed to link KAs to Group {rg_name}: {e}")
+
+    def _derive_knowledge_areas_from_group(self, rg_name: str) -> List[int]:
+        """Returns the linked research group's already-known knowledge area ids."""
+        try:
+            all_groups = self._get_all_groups()
+            target_group = None
+
+            def normalize(s):
+                return (
+                    unicodedata.normalize("NFD", s)
+                    .encode("ascii", "ignore")
+                    .decode("utf-8")
+                    .upper()
+                    .strip()
+                )
+
+            target_norm = normalize(rg_name)
+            for group in all_groups:
+                g_name = group.name if hasattr(group, "name") else group.get("name")
+                if g_name and normalize(g_name) == target_norm:
+                    target_group = group
+                    break
+            if not target_group:
+                return []
+            gid = (
+                target_group.id
+                if hasattr(target_group, "id")
+                else target_group.get("id")
+            )
+            session = self.rg_controller._service._repository._session
+            rows = session.execute(
+                text("SELECT area_id FROM group_knowledge_areas WHERE group_id = :gid"),
+                {"gid": gid},
+            ).fetchall()
+            return [row[0] for row in rows]
+        except Exception as e:
+            logger.warning(f"Failed deriving knowledge areas from Group {rg_name}: {e}")
+            return []
 
     def _link_kas_to_researcher(self, person_id: Any, ka_ids: List[int]) -> None:
         try:

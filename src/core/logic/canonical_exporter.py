@@ -1850,7 +1850,7 @@ class CanonicalDataExporter:
                 {
                     "id": item.id,
                     "name": item.name,
-                    "status": item.status,
+                    "status": item.status or "Concluded",
                     "description": item.description,
                     "start_date": (
                         item.start_date.isoformat() if item.start_date else None

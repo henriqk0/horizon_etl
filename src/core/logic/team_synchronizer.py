@@ -25,6 +25,16 @@ class TeamSynchronizer:
         self.team_controller = team_controller
         self.roles_cache = roles_cache
         self._teams_cache = None
+        # Maps normalize_text(team.name) -> Team, built once alongside
+        # _teams_cache and maintained incrementally. Without this,
+        # ensure_team() re-normalized every cached team's name (an expensive
+        # Unicode NFD + genexpr pass) on every single call, scanning the
+        # whole teams table (thousands of rows and growing every run, since
+        # every initiative/advisorship gets its own team) linearly each
+        # time — this was the actual root cause of the lattes_advisorships
+        # timeout, confirmed via cProfile: ~1.5M normalize_text calls for
+        # just 15 files, 262 ensure_team() calls x ~5.8k cached teams.
+        self._teams_by_key: Dict[str, Any] = {}
 
     def ensure_team(self, team_name: str, description: str) -> Optional[Any]:
         """
@@ -40,25 +50,35 @@ class TeamSynchronizer:
         try:
             if self._teams_cache is None:
                 self._teams_cache = self.team_controller.get_all()
-            existing_teams = self._teams_cache
+                self._teams_by_key = {}
+                for t in self._teams_cache:
+                    t_name = (
+                        t.name
+                        if hasattr(t, "name")
+                        else (t.get("name") if isinstance(t, dict) else "")
+                    )
+                    if t_name:
+                        self._teams_by_key.setdefault(t_name, t)
+                        self._teams_by_key.setdefault(normalize_text(t_name), t)
+
             team_name_key = normalize_text(team_name)
-            for t in existing_teams:
-                t_name = (
-                    t.name
-                    if hasattr(t, "name")
-                    else (t.get("name") if isinstance(t, dict) else "")
-                )
-                if t_name == team_name or normalize_text(t_name) == team_name_key:
-                    logger.debug(f"Team already exists: {team_name[:50]}...")
-                    return t
+            existing = self._teams_by_key.get(team_name) or self._teams_by_key.get(
+                team_name_key
+            )
+            if existing is not None:
+                logger.debug(f"Team already exists: {team_name[:50]}...")
+                return existing
 
             team = self.team_controller.create_team(
                 name=team_name, description=description
             )
             logger.info(f"Created team: {team_name[:50]}...")
-            # Add newly created team to cache so subsequent lookups don't reload
+            # Add newly created team to cache/index so subsequent lookups
+            # don't reload or fall back to a linear scan.
             if self._teams_cache is not None:
                 self._teams_cache.append(team)
+            self._teams_by_key.setdefault(team_name, team)
+            self._teams_by_key.setdefault(team_name_key, team)
             return team
         except Exception as e:
             logger.warning(f"Failed to manage team '{team_name[:50]}': {e}")

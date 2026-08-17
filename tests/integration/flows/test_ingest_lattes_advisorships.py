@@ -35,7 +35,6 @@ def mock_lattes_data(tmp_path):
 
 
 @patch("src.flows.lattes.advisorships.get_run_logger")
-@patch("src.flows.lattes.advisorships.ProjectLoader")
 @patch("src.flows.lattes.advisorships.LattesAdvisorshipMappingStrategy")
 @patch("src.flows.lattes.advisorships.LattesParser")
 @patch("src.flows.lattes.advisorships.resolve_researcher_from_lattes")
@@ -45,14 +44,17 @@ def test_ingest_advisorships_file_task(
     mock_resolve_researcher,
     MockParser,
     MockMappingStrategy,
-    MockProjectLoader,
     _mock_logger,
     mock_lattes_data,
 ):
+    # all_researchers and loader are now pre-fetched/injected by the caller
+    # (ingest_lattes_advisorships_flow) instead of being constructed inside
+    # the task — see src/flows/lattes/advisorships.py.
     mock_res_ctrl = MockResearcherCtrl.return_value
-    mock_res_ctrl.get_all.return_value = [MagicMock(name="candidate")]
     mock_session = MagicMock()
     mock_res_ctrl._service._repository._session = mock_session
+    all_researchers = [MagicMock(name="candidate")]
+    mock_loader = MagicMock()
 
     supervisor = MagicMock()
     supervisor.name = "Test Researcher"
@@ -68,20 +70,16 @@ def test_ingest_advisorships_file_task(
     mock_parser = MockParser.return_value
     mock_parser.parse_advisorships.return_value = parsed_advisorships
 
-    mock_loader = MockProjectLoader.return_value
-
-    ingest_advisorships_file_task.fn(mock_lattes_data)
+    ingest_advisorships_file_task.fn(mock_lattes_data, all_researchers, mock_loader)
 
     mock_resolve_researcher.assert_called_once_with(
-        mock_res_ctrl.get_all.return_value,
+        all_researchers,
         lattes_id="1234567890123456",
         json_name="Test Researcher",
         session=mock_session,
     )
     MockMappingStrategy.assert_called_once_with("Test Researcher")
-    MockProjectLoader.assert_called_once_with(
-        mapping_strategy=MockMappingStrategy.return_value
-    )
+    assert mock_loader.mapping_strategy == MockMappingStrategy.return_value
     mock_loader.process_records.assert_called_once_with(
         parsed_advisorships,
         source_file=mock_lattes_data,

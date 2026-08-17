@@ -28,11 +28,12 @@ from loguru import logger
 # (name, app.py argv tail, timeout seconds, critical)
 # Order is load-bearing: SigPesq -> CNPq -> Lattes, then consolidation, exports, then LGPD.
 _PHASES = [
-    ("sigpesq", ["sigpesq"], 3600, True),
+    ("sigpesq", ["sigpesq"], 3600, False),
     ("cnpq", ["cnpq_sync"], 5400, False),
     ("lattes_download", ["lattes_download"], 5400, False),
     ("lattes_projects", ["ingest_lattes_projects"], 3600, False),
     ("lattes_advisorships", ["lattes_advisorships"], 1800, False),
+    ("merge_backup", ["merge_backup"], 600, False),
     ("consolidate_duplicates", ["consolidate_duplicates"], 300, False),
     ("export_canonical", ["export_canonical"], 1800, True),
     ("knowledge_areas_mart", ["ka_mart"], 900, False),
@@ -121,10 +122,32 @@ def run_weekly(
     campus_name: Optional[str] = None, output_dir: str = "data/exports"
 ) -> int:
     """Run every weekly phase in its own subprocess. Returns a process exit code."""
+    from pathlib import Path
     from src.core.logic.export_cache_bootstrapper import ExportCacheBootstrapper
+    from src.core.logic.backup_db_provisioner import BackupDatabaseProvisioner
+    from src.core.logic.backup_merger import BackupDatabaseMerger
+    from src.core.logic.provenance_tracker import ProvenanceTracker
+
+    logger.info("Initializing backup database verification...")
+    BackupDatabaseProvisioner().ensure_backup_database()
+    BackupDatabaseMerger().merge(
+        Path("db/horizon.db"), Path("data/backup/horizon_backup.db")
+    )
 
     logger.info("Initializing export cache bootstrap...")
     ExportCacheBootstrapper().bootstrap(target_dir=output_dir)
+
+    # Provenance markers describe THIS run's data origins, but nothing ever
+    # deleted them: they are plain files in the export directory, so a marker
+    # written by a previous run (or restored from an archive by the bootstrap
+    # above, since export archives carry the dot-files) survives into the next
+    # one and misreports it. That is cosmetic in the summary table but load
+    # bearing for the backup-sync decision at the end of this function, which
+    # refuses to sync when any origin is non-LIVE — a single stale
+    # "ZIP ANTERIOR" would otherwise block every future sync forever, exactly
+    # when the run actually succeeded. Cleared after the bootstrap so restored
+    # markers are wiped too; phases with no marker default to LIVE.
+    ProvenanceTracker.clear_provenance(output_dir)
 
     campus = (campus_name or "").strip()
     results = []
@@ -159,6 +182,37 @@ def run_weekly(
         _notify(results, crit_failed, total_elapsed)
     except Exception as exc:  # notification must never change the run outcome
         logger.warning("Telegram summary failed: {}", exc)
+
+    if not failed:
+        # Only refresh the reference backup from a run that was fully LIVE —
+        # never from a run where a source silently fell back to a previous
+        # run's ZIP snapshot (exit code 0 doesn't mean the data was fresh;
+        # see report §1 for the historical-data-loss bug this guards
+        # against). SigPesq's project-PDF/Mistral AI extraction step is the
+        # one deliberate exception: those PDFs rarely change week to week
+        # and the extractor is designed to reuse already-extracted files
+        # (skip_existing=True), so reusing them never marks the "sigpesq"
+        # phase's provenance as non-LIVE on its own — only an actual failed
+        # research-group/project/advisorship scrape does (see
+        # SigPesqAdapter._trigger_download's "ZIP ANTERIOR" fallback).
+        stale_phases = [
+            r for r in results if r.get("origin") not in ("LIVE", "BACKUP_DB")
+        ]
+        if stale_phases:
+            logger.warning(
+                "Skipping backup database sync — non-live data used in: {}",
+                ", ".join(f"{r['name']} ({r.get('origin')})" for r in stale_phases),
+            )
+        else:
+            try:
+                logger.info(
+                    "Updating reference backup database after 100% successful, fully-live weekly run..."
+                )
+                BackupDatabaseMerger().sync_backup_from_active(
+                    Path("db/horizon.db"), Path("data/backup/horizon_backup.db")
+                )
+            except Exception as e:
+                logger.warning("Failed to sync backup database: {}", e)
 
     if crit_failed:
         logger.error(

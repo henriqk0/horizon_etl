@@ -1,4 +1,4 @@
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Tuple
 
 from loguru import logger
 from sqlalchemy import text
@@ -9,6 +9,77 @@ from src.core.logic.researcher_creation import (
     create_researcher_with_resume_fallback,
 )
 from src.research_domain_compat import AdvisorshipRole
+
+# Snapshot of the scoring-relevant fields for a candidate
+# (name, identification_id, brand_id, cnpq_url, id, resume, citation_names),
+# keyed by id(researcher) (Python object identity — cheap, never touches the
+# DB). See _get_candidate_snapshot for why this cache exists.
+_candidate_snapshot_cache: Dict[int, Tuple[str, str, str, str, Any, str, str]] = {}
+
+
+# Lighter-weight (name, identification_id) snapshot cache shared by
+# resolve_researcher_by_name/resolve_person_by_name — same rollback-reload
+# vulnerability as _candidate_snapshot_cache, smaller payload since neither
+# function needs brand_id/cnpq_url/resume/citation_names.
+_name_snapshot_cache: Dict[int, Tuple[str, str]] = {}
+
+
+def _reset_candidate_snapshot_cache() -> None:
+    """Test/process-boundary hook — clears the module-level snapshot caches."""
+    _candidate_snapshot_cache.clear()
+    _name_snapshot_cache.clear()
+
+
+def _get_name_snapshot(entity: Any) -> Tuple[str, str]:
+    """Returns (name, identification_id) for a Researcher/Person candidate,
+    extracted once and cached by object identity — see
+    _get_candidate_snapshot's docstring for why this exists."""
+    key = id(entity)
+    cached = _name_snapshot_cache.get(key)
+    if cached is not None:
+        return cached
+    snapshot = (
+        getattr(entity, "name", None) or "",
+        getattr(entity, "identification_id", None) or "",
+    )
+    _name_snapshot_cache[key] = snapshot
+    return snapshot
+
+
+def _get_candidate_snapshot(
+    researcher: Any,
+) -> Tuple[str, str, str, str, Any, str, str]:
+    """Returns (name, identification_id, brand_id, cnpq_url, id, resume,
+    citation_names) for a candidate, extracted once and cached by object
+    identity.
+
+    Without this, _score_candidate's attribute access went straight to the
+    live SQLAlchemy object. That's normally cheap, but any session.rollback()
+    elsewhere in the run (e.g. project_loader.py's per-row error handler,
+    hit routinely on duplicate initiative names) expires every object
+    already loaded into that session — including all ~10k cached
+    researchers. The next full resolve_researcher_from_lattes() scan then
+    reloads each one individually from the DB (confirmed via SQL tracing:
+    ~10,166 individual "SELECT researchers JOIN persons ..." queries costing
+    over 100s for a single Lattes file). Caching the handful of plain fields
+    actually needed for scoring makes the scan immune to that invalidation
+    after the first successful read of each candidate.
+    """
+    key = id(researcher)
+    cached = _candidate_snapshot_cache.get(key)
+    if cached is not None:
+        return cached
+    snapshot = (
+        getattr(researcher, "name", None) or "",
+        getattr(researcher, "identification_id", None) or "",
+        getattr(researcher, "brand_id", None) or "",
+        getattr(researcher, "cnpq_url", None) or "",
+        getattr(researcher, "id", None),
+        getattr(researcher, "resume", None) or "",
+        getattr(researcher, "citation_names", None) or "",
+    )
+    _candidate_snapshot_cache[key] = snapshot
+    return snapshot
 
 
 def resolve_researcher_from_lattes(
@@ -38,6 +109,7 @@ def resolve_researcher_from_lattes(
             json_name=json_name,
             json_name_norm=json_name_norm,
             session=session,
+            parser=parser,
         )
         if score > best_score:
             best = researcher
@@ -72,8 +144,7 @@ def resolve_researcher_by_name(
     best_score = float("-inf")
     for researcher in all_researchers:
         score = 0
-        res_name = getattr(researcher, "name", None) or ""
-        res_identification = getattr(researcher, "identification_id", None) or ""
+        res_name, res_identification = _get_name_snapshot(researcher)
 
         if (
             identification_id
@@ -115,8 +186,7 @@ def resolve_person_by_name(
     best_score = float("-inf")
     for person in all_persons:
         score = 0
-        p_name = getattr(person, "name", None) or ""
-        p_identification = getattr(person, "identification_id", None) or ""
+        p_name, p_identification = _get_name_snapshot(person)
 
         if (
             identification_id
@@ -219,12 +289,10 @@ def _find_person_by_name(name: str, session: Any) -> Optional[Any]:
 
     try:
         rows = session.execute(
-            text(
-                """
+            text("""
                 SELECT id, name FROM persons
                 WHERE lower(name) = :name_lower
-                """
-            ),
+                """),
             {"name_lower": name_lower},
         ).fetchall()
 
@@ -232,12 +300,10 @@ def _find_person_by_name(name: str, session: Any) -> Optional[Any]:
             # Fallback: accent-insensitive match (PostgreSQL unaccent extension)
             try:
                 rows = session.execute(
-                    text(
-                        """
+                    text("""
                         SELECT id, name FROM persons
                         WHERE unaccent(lower(name)) = unaccent(:name_lower)
-                        """
-                    ),
+                        """),
                     {"name_lower": name_lower},
                 ).fetchall()
             except Exception:
@@ -280,15 +346,19 @@ def _score_candidate(
     json_name: Optional[str],
     json_name_norm: str,
     session: Any,
+    parser: LattesParser,
 ) -> int:
-    parser = LattesParser()
-
     score = 0
     matched = False
-    name = getattr(researcher, "name", None) or ""
-    identification_id = getattr(researcher, "identification_id", None) or ""
-    brand_id = getattr(researcher, "brand_id", None) or ""
-    cnpq_url = getattr(researcher, "cnpq_url", None) or ""
+    (
+        name,
+        identification_id,
+        brand_id,
+        cnpq_url,
+        researcher_id,
+        resume,
+        citation_names,
+    ) = _get_candidate_snapshot(researcher)
 
     if lattes_id:
         if str(brand_id) == lattes_id:
@@ -312,11 +382,11 @@ def _score_candidate(
     if not matched:
         return 0
 
-    score += _linked_data_score(getattr(researcher, "id", None), session)
+    score += _linked_data_score(researcher_id, session)
 
-    if getattr(researcher, "resume", None):
+    if resume:
         score += 25
-    if getattr(researcher, "citation_names", None):
+    if citation_names:
         score += 10
 
     return score
@@ -328,8 +398,7 @@ def _linked_data_score(person_id: Optional[int], session: Any) -> int:
 
     try:
         row = session.execute(
-            text(
-                """
+            text("""
                 SELECT
                     (
                         SELECT COUNT(*)
@@ -339,8 +408,7 @@ def _linked_data_score(person_id: Optional[int], session: Any) -> int:
                     ) +
                     (SELECT COUNT(*) FROM academic_educations WHERE researcher_id = :pid) +
                     (SELECT COUNT(*) FROM article_authors WHERE researcher_id = :pid)
-                """
-            ),
+                """),
             {
                 "pid": person_id,
                 "supervisor_role": AdvisorshipRole.SUPERVISOR.value,
@@ -350,8 +418,7 @@ def _linked_data_score(person_id: Optional[int], session: Any) -> int:
     except Exception:
         try:
             row = session.execute(
-                text(
-                    """
+                text("""
                     SELECT
                         (
                             SELECT COUNT(*)
@@ -360,8 +427,7 @@ def _linked_data_score(person_id: Optional[int], session: Any) -> int:
                         ) +
                         (SELECT COUNT(*) FROM academic_educations WHERE researcher_id = :pid) +
                         (SELECT COUNT(*) FROM article_authors WHERE researcher_id = :pid)
-                    """
-                ),
+                    """),
                 {"pid": person_id},
             ).fetchone()
             return int(row[0] or 0) * 20 if row else 0

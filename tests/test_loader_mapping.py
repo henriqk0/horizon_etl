@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
+from src.core.logic.pii_anonymizer import anonymize_email
 from src.core.logic.research_group_loader import ResearchGroupLoader
 from src.core.logic.strategies.sigpesq_excel import (
     SigPesqCampusStrategy,
@@ -41,6 +42,12 @@ def test_research_group_loader_mapping():
     loader.rg_ctrl.create_research_group.return_value = mock_research_group
 
     loader.researcher_ctrl.get_all.return_value = []
+    # fetchall() must report "no existing Person" so resolve_or_create_researcher's
+    # _find_person_by_name lookup falls through to researcher_ctrl.create_researcher
+    # (what this test verifies) instead of promoting a spurious mock match.
+    loader.researcher_ctrl._service._repository._session.execute.return_value.fetchall.return_value = (
+        []
+    )
     mock_researcher = MagicMock()
     mock_researcher.id = 50
     loader.researcher_ctrl.create_researcher.return_value = mock_researcher
@@ -73,10 +80,13 @@ def test_research_group_loader_mapping():
         knowledge_area_ids=[1],
     )
 
+    # Email is LGPD-anonymized before reaching the controller, and
+    # identification_id (a CPF-like identity column) is never set from an
+    # email hash — see src/core/logic/strategies/sigpesq_excel.py.
     loader.researcher_ctrl.create_researcher.assert_called_with(
         name="Carlos Campos",
-        emails=["carlos@ifes.edu.br"],
-        identification_id="carlos@ifes.edu.br",
+        emails=[anonymize_email("carlos@ifes.edu.br")],
+        identification_id=None,
     )
     loader.rg_ctrl.add_leader.assert_called()
 

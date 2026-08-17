@@ -49,6 +49,7 @@ def test_ingest_file_creates_researcher_when_lattes_match_is_missing(
     mock_resolve_or_create.return_value = created_researcher
 
     entity_manager = MagicMock()
+    article_ctrl = MagicMock()
 
     with (
         patch("builtins.open", new_callable=MagicMock),
@@ -56,13 +57,20 @@ def test_ingest_file_creates_researcher_when_lattes_match_is_missing(
     ):
         mock_json.return_value = {"nome": "Leonardo Azevedo Scardua"}
 
+        # all_researchers/researcher_ctrl/article_ctrl are now pre-fetched and
+        # injected by the caller instead of being constructed inside the task
+        # — see src/flows/lattes/projects.py.
         ingest_file_task.fn(
             "data/lattes_json/10_Leonardo-Azevedo-Scardua_3651077981942079.json",
             entity_manager,
+            [],
+            researcher_ctrl,
+            article_ctrl,
         )
 
     mock_resolve_or_create.assert_called_once_with(
         researcher_ctrl,
         [],
         name="Leonardo Azevedo Scardua",
+        session=researcher_ctrl._service._repository._session,
     )

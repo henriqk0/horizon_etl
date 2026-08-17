@@ -172,6 +172,37 @@ def test_tracking_recorder_serializes_temporal_json_values():
     assert persisted_run.status == "success"
 
 
+def test_record_attribute_assertions_redacts_email_in_value_json():
+    """LGPD regression guard: record_attribute_assertions must sanitize
+    values before persisting them, like record_source_record/record_change
+    already do — previously it only ran values through _json_safe (pure
+    serialization, no redaction), so an email passed as an asserted
+    attribute value would have been stored in clear text in the audit
+    trail. See src/tracking/recorder.py."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+    recorder = _build_tracking_recorder(session)
+
+    with recorder.run_context(source_system="sigpesq", flow_name="sync_groups"):
+        source_record = recorder.record_source_record(
+            source_entity_type="researcher",
+            payload={"name": "Someone"},
+            source_record_id="researcher-1",
+        )
+        recorder.record_attribute_assertions(
+            source_record_id=source_record.id,
+            canonical_entity_type="researcher",
+            canonical_entity_id=1,
+            selected_attributes={"contact": "someone@example.com"},
+            selection_reason="captured contact info",
+        )
+
+    persisted_assertion = session.query(AttributeAssertion).one()
+    assert persisted_assertion.value_json == "[REDACTED]"
+
+
 def test_tracking_recorder_finalizes_failed_run_after_session_error():
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)

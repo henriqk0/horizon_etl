@@ -263,12 +263,6 @@ def main():
             logger.info("Executing Flow: Ingest Lattes Advisorships")
             ingest_lattes_advisorships_flow()
 
-        if flow_to_run == "consolidate_duplicates":
-            from src.scripts.consolidate_duplicates import execute as run_consolidate
-
-            logger.info("Executing: Consolidate Duplicate Persons")
-            run_consolidate("db/horizon.db", "all")
-
         if flow_to_run == "lattes_full":
             logger.info("Executing Flow: Lattes Complete Pipeline")
             lattes_complete_flow()
@@ -278,6 +272,45 @@ def main():
 
             logger.info("Executing Flow: LGPD PII Anonymize Backfill")
             anonymize_backfill_flow()
+
+        elif flow_to_run == "init_backup_db":
+            from src.core.logic.backup_db_provisioner import BackupDatabaseProvisioner
+
+            logger.info("Executing: Initialize / Provision Reference Backup Database")
+            db_p = BackupDatabaseProvisioner().ensure_backup_database(
+                force_rebuild=True
+            )
+            logger.info(f"Backup Database ready at: {db_p}")
+
+        elif flow_to_run == "merge_backup":
+            from pathlib import Path
+
+            from src.core.logic.backup_merger import BackupDatabaseMerger
+
+            logger.info("Executing: Merge Reference Backup Data into Active Database")
+            merger = BackupDatabaseMerger()
+            merger.ensure_backup_db(Path("data/backup/horizon_backup.db"))
+            summary = merger.merge(
+                Path("db/horizon.db"), Path("data/backup/horizon_backup.db")
+            )
+            logger.info(f"Backup Merge summary: {summary}")
+
+        elif flow_to_run == "migrate_team_membership":
+            from src.core.logic.team_membership_migration import (
+                migrate_team_membership,
+            )
+
+            logger.info(
+                "Executing: Migrate Team Membership (fix id-collision and duplicate rows)"
+            )
+            report = migrate_team_membership("db/horizon.db")
+            logger.info(f"Team membership migration report: {report}")
+
+        elif flow_to_run == "verify_team_membership":
+            from src.scripts.verify_team_membership_integrity import main as verify_main
+
+            logger.info("Executing: Verify Team Membership Integrity")
+            verify_main([])
 
         elif flow_to_run == "consolidate_duplicates":
             from src.scripts.consolidate_duplicates import execute

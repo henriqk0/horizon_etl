@@ -133,6 +133,19 @@ class EntityManager:
             logger.warning(f"Error ensuring roles exist via controller: {e}")
             self._ensure_roles_fallback()
 
+        missing = [r for r in self.ROLES if r not in self._roles_cache]
+        if missing:
+            # Both the controller path and the fallback failed to seed these
+            # roles. Proceeding with an incomplete role cache is exactly how
+            # the "9,556 people misclassified as Unrecognized" incident
+            # happened (roles table ended up empty and nothing downstream
+            # noticed) — fail fast instead of silently degrading again.
+            raise RuntimeError(
+                f"Failed to ensure required roles exist: {missing}. "
+                "Both the controller and fallback DB paths failed — see "
+                "preceding log entries for the underlying error."
+            )
+
         return self._roles_cache
 
     def _ensure_roles_fallback(self) -> None:
